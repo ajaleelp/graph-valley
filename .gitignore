@@ -7,3 +7,7 @@ server.log
 /render-preview/
 .vscode/
 .idea/
+
+# API keys are passed as environment variables; never commit them
+.env
+.env.*
