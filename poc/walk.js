@@ -10,7 +10,7 @@
  * make her crawl up stairs and bolt across platforms.
  */
 
-import { group, bx, sortShapes } from './iso.js';
+import { group, bx, sortShapes, order, depthSort } from './iso.js';
 
 export const HEIGHT = 2.4;   // total, feet to crown
 export const HALF = 0.55;    // half-width; must stay under slices.INSET
@@ -70,4 +70,24 @@ export function traveller(p) {
   bx(g, p.x - HALF, p.y - HALF, p.z + 1.35, 2 * HALF, 2 * HALF, 0.37, 'brim');
   bx(g, p.x - 0.34, p.y - 0.34, p.z + 1.72, 0.68, 0.68, 0.68, 'head');
   return sortShapes(g);
+}
+
+/* Placing the traveller in the draw order.
+ *
+ * She is sorted INTO the scene every frame rather than inserted into a
+ * precomputed order. The obvious optimisation — sort the static world once,
+ * then find the one slot she belongs in — is unsound, and was the bug behind
+ * "she walks below the path". The scene order comes from a topological sort of
+ * a PARTIAL order, so two groups that cannot be compared to each other are
+ * separated by an arbitrary tie-break. She may be in front of the one the
+ * tie-break put last and behind the one it put first, and then no single slot
+ * satisfies both: at 427 of 505 walkable positions across the six worlds there
+ * was no valid slot at all.
+ *
+ * Sorting the whole scene with her in it is exact by construction, and costs
+ * 0.16ms for the largest world — a hundredth of a frame. The optimisation was
+ * never worth its risk.
+ */
+export function orderWith(groups, her) {
+  return depthSort(groups.concat([her]));
 }

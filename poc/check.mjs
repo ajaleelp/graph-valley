@@ -8,9 +8,9 @@
 import { build } from './build.js';
 import { GRAPHS, randomGraph } from './graphs.js';
 import { findWalk, reachable } from './nav.js';
-import { plan, at, duration, traveller, HEIGHT, HALF } from './walk.js';
+import { plan, at, duration, traveller, orderWith, HEIGHT, HALF } from './walk.js';
 import { OPP, DELTA, socketPos, HEADROOM, AXIS, SLAB, INSET } from './slices.js';
-import { order as frontOf } from './iso.js';
+import { order as frontOf, screenBox } from './iso.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -184,6 +184,35 @@ function verify(name, graph) {
     }
   }
   check(`${name}: traveller sortable everywhere`, !sunk, `${sunkAt} spot(s), e.g. ${sunk}`);
+
+  // 10. And the order the VIEWER actually paints puts her in the right place.
+  //     Sortability is necessary but not sufficient: the previous bug was an
+  //     insertion into a precomputed order that satisfied only one of the two
+  //     constraints, so she was placed wrongly at spots that pass check 9.
+  // Only pairs whose SCREEN boxes overlap matter: two groups that miss each
+  // other on screen cannot paint over one another whatever order they are in,
+  // and the sort deliberately leaves them unconstrained.
+  const boxes = new Map(w.groups.map((g) => [g, screenBox(g)]));
+  const overlaps = (a, b) => !(a.x1 <= b.x0 || b.x1 <= a.x0 || a.y1 <= b.y0 || b.y1 <= a.y0);
+  let painted = null, paintedAt = 0;
+  for (const [, p] of w.nav.pos) {
+    const her = traveller(p);
+    const hb = screenBox(her);
+    const seq = orderWith(w.groups, her);
+    const i = seq.indexOf(her);
+    let wrong = null;
+    for (let j = 0; j < seq.length && !wrong; j++) {
+      if (j === i || !overlaps(hb, boxes.get(seq[j]))) continue;
+      const o = frontOf(her, seq[j]);
+      // she is behind seq[j] but it is painted first, or in front but painted after
+      if ((o < 0 && j < i) || (o > 0 && j > i)) wrong = seq[j];
+    }
+    if (wrong) {
+      paintedAt++;
+      if (!painted) painted = `at ${p.x},${p.y},${p.z}: ${wrong.slice || wrong.kind}:${wrong.part ?? ''} ${wrong.id || ''}`;
+    }
+  }
+  check(`${name}: painted in the right order`, !painted, `${paintedAt} spot(s), e.g. ${painted}`);
 
   // ...and the geometry has to leave room for her in the first place.
   check(`${name}: architecture clears the traveller`, HALF < INSET, `${HALF} >= ${INSET}`);

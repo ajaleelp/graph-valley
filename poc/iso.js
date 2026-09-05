@@ -84,7 +84,7 @@ export function faceT(g, Z, x0, y0, x1, y1, cls = 'a-t') {
 
 /* --------------------------------- depth sort --------------------------- */
 
-function screenBox(g) {
+export function screenBox(g) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const X of [g.x0, g.x1]) for (const Y of [g.y0, g.y1]) for (const Z of [g.z0, g.z1]) {
     const p = P(X, Y, Z);

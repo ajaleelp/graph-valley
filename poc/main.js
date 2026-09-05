@@ -6,12 +6,12 @@
  * order rather than re-rendering the scene.
  */
 
-import { P, order as frontOf, depthSort } from './iso.js';
+import { P, depthSort } from './iso.js';
 import { build } from './build.js';
 import { CELL } from './slices.js';
 import { GRAPHS } from './graphs.js';
 import { findWalk, nearestNode, navKey } from './nav.js';
-import { plan, at, duration, traveller } from './walk.js';
+import { plan, at, duration, traveller, orderWith } from './walk.js';
 
 const svg = document.getElementById('stage');
 const NS = 'http://www.w3.org/2000/svg';
@@ -21,7 +21,7 @@ const el = (tag, attrs = {}) => {
   return n;
 };
 
-const S = { world: null, view: { x: 0, y: 0, k: 1 }, at: null, walking: false, els: [], order: [] };
+const S = { world: null, view: { x: 0, y: 0, k: 1 }, at: null, walking: false, elFor: new Map() };
 
 /* ------------------------------------------------------------- traveller -- */
 
@@ -37,13 +37,6 @@ function drawGroup(g) {
   return node;
 }
 
-/* Where the traveller belongs in a settled draw order: immediately before the
- * first group she is in front of. */
-function insertionIndex(sorted, her) {
-  for (let i = 0; i < sorted.length; i++) if (frontOf(her, sorted[i]) < 0) return i;
-  return sorted.length;
-}
-
 /* ----------------------------------------------------------------- scene -- */
 
 let scene, navLayer, routeLayer, labelLayer, youEl = null, labels = [];
@@ -56,12 +49,12 @@ function render(world) {
   labelLayer = el('g');
   svg.append(scene, routeLayer, navLayer, labelLayer);
 
-  S.order = depthSort(world.groups);
-  S.els = S.order.map((g) => {
+  S.elFor = new Map();
+  for (const g of depthSort(world.groups)) {
     const node = drawGroup(g);
+    S.elFor.set(g, node);
     scene.appendChild(node);
-    return node;
-  });
+  }
 
   // nav graph overlay
   const seen = new Set();
@@ -108,11 +101,19 @@ function render(world) {
 function placeTraveller() {
   if (!S.at) return;
   const her = traveller(S.at);
-  const idx = insertionIndex(S.order, her);
-  const node = drawGroup(her);
   if (youEl) youEl.remove();
-  youEl = node;
-  scene.insertBefore(node, S.els[idx] || null);
+  youEl = drawGroup(her);
+
+  // Reconcile the DOM against the exact order rather than rebuilding it. The
+  // world's groups keep their relative places from frame to frame, so this
+  // moves one element in the common case even though it checks all of them.
+  const want = orderWith(S.world.groups, her).map((g) => (g === her ? youEl : S.elFor.get(g)));
+  let node = scene.firstChild;
+  for (const el of want) {
+    if (!el) continue;
+    if (node === el) { node = node.nextSibling; continue; }
+    scene.insertBefore(el, node);
+  }
 }
 
 /* ------------------------------------------------------------------ view -- */

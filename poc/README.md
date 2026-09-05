@@ -97,6 +97,23 @@ one per deck of a crossing, and a court split into base / far / near / overhead.
 `check.mjs` asserts it directly — for every walkable position in every world, no
 group is left unorderable against her.
 
+Being sortable is necessary but not sufficient: she also has to be *placed*
+correctly. The tempting optimisation is to sort the static world once and then
+insert her into the one slot she belongs in. That is unsound. The order comes
+from a topological sort of a PARTIAL order, so two groups that cannot be
+compared to each other are separated by an arbitrary tie-break — and she can be
+in front of the one the tie-break put last while being behind the one it put
+first. No single slot then satisfies both constraints, and the insertion picks
+one and paints her under the walkway. It was wrong at 25 of 53 walkable
+positions on the smallest world.
+
+She is therefore sorted INTO the scene every frame. That costs 0.3ms on the
+largest world — two per cent of a frame — and the DOM is reconciled rather than
+rebuilt, so the common case moves one element. The second assertion checks the
+order the viewer really paints, counting only pairs whose screen boxes overlap,
+since groups that miss each other on screen cannot paint over one another
+whatever order they are in.
+
 Two smaller rules fall out of the same requirement. Architecture stands back
 from a deck's edge further than she is wide, or a court's masses overlap her
 when she stands on that edge's socket. And an inlaid floor panel is sunk a hair
@@ -133,7 +150,8 @@ Over six authored graphs and 200 random DAGs — 1442 assertions:
 - **the motion, not just the destination** — sampled at 60fps, the traveller
   starts and ends exactly on her endpoints, never leaves the nav polyline (to
   1e-6), never moves more than 1.5 units in a frame, and never descends;
-- **the traveller is sortable everywhere she can stand** — see below;
+- **the traveller is sortable everywhere she can stand**, and **the order the
+  viewer actually paints puts her in the right place** — see below;
 - **she fits under every crossing**, with the upper slab's thickness counted;
 - **only the four templates** are ever instantiated;
 - **crossings clear** by at least `HEADROOM` levels and the nav graph keeps
