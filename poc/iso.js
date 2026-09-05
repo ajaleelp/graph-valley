@@ -69,10 +69,16 @@ export function bx(g, x, y, z, w, d, h, side = 's', top = side, skip = '') {
 }
 
 /* A flat panel lying on a horizontal surface, for markings that must not add
- * height. Given a hair of thickness so the sort knows it sits ON its host
- * rather than inside it. */
+ * height.
+ *
+ * Its hair of thickness hangs BELOW the surface, never above. A panel that rose
+ * even 0.01 above its host lifted the whole group's bounding box past the deck
+ * top, and that top is exactly what the sort uses to separate the platform from
+ * whoever is standing on it — so an inlaid floor tile was enough to make the
+ * traveller unorderable against the court she was standing in. Being inset, the
+ * panel still sorts above the deck on the near-corner tie-break. */
 export function faceT(g, Z, x0, y0, x1, y1, cls = 'a-t') {
-  return solid(g, x0, y0, Z, x1, y1, Z + 0.01,
+  return solid(g, x0, y0, Z - 0.01, x1, y1, Z,
     [{ cls, pts: pts([P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)]) }]);
 }
 

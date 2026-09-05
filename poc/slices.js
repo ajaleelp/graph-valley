@@ -90,6 +90,11 @@ const skipFor = (sides) => (sides.includes('+x') ? 'r' : '') + (sides.includes('
  * the traveller walks the centreline. */
 const LANE_HALF = 1.0;
 
+/* How far the architecture stands back from the deck's edge. It must exceed the
+ * traveller's half-width, or a court's masses overlap her when she is standing
+ * on that edge's socket and the sort can no longer separate her from them. */
+export const INSET = 0.9;
+
 function massSlots(span) {
   const S = span * CELL;
   const out = [];
@@ -99,7 +104,7 @@ function massSlots(span) {
     x = c * CELL + CELL / 2 + LANE_HALF;
   }
   out.push([x, S]);
-  return out.map(([a, b]) => [a + 0.6, b - 0.6]).filter(([a, b]) => b - a > 0.9);
+  return out.map(([a, b]) => [a + INSET, b - INSET]).filter(([a, b]) => b - a > 0.9);
 }
 
 /* The far strip may be tall; the near strip stays low. That is not taste: in
@@ -109,7 +114,7 @@ const FEATURE = {
   gate(B, F, A, c) {
     const h = 5 * c.tall;
     for (const [a, b] of c.far) c.mass(B, a, b, c.fy, c.fd, 0, h);
-    c.mass(A, 0.6, c.S - 0.6, c.fy, c.fd, h, 0.9, 's', 't');       // lintel
+    c.mass(A, INSET, c.S - INSET, c.fy, c.fd, h, 0.9, 's', 't');   // lintel
     for (const [a, b] of c.near) c.mass(F, a, b, c.ny, c.nd, 0, 0.8);
   },
   pillars(B, F, A, c) {
@@ -188,11 +193,11 @@ export function court(spec) {
   // The far strip runs along the low-y edge, the near strip along the high-y
   // edge, and the band between them stays clear for the +-x lanes.
   const slots = massSlots(span);
-  const strip = CELL / 2 - LANE_HALF - 0.6;
+  const strip = CELL / 2 - LANE_HALF - INSET;
   const ctx = {
     S, tall, far: slots, near: slots,
-    fy: 0.6, fd: strip,
-    ny: S - 0.6 - strip, nd: strip,
+    fy: INSET, fd: strip,
+    ny: S - INSET - strip, nd: strip,
     // place a mass in world coordinates from deck-relative bounds
     mass: (g, a, b, y0, d, dz, h, mat = 's', top = mat) =>
       (b - a > 0.05 && d > 0.05 ? bx(g, x + a, y + y0, z + dz, b - a, d, h, mat, top) : null),
@@ -251,25 +256,35 @@ export function courtSockets(u, v, span) {
 export function straight(spec) {
   const { u, v, from, to, z0, z1, id } = spec;
   const { x, y } = cellOrigin(u, v);
-  const g = group('slice', { slice: 'straight', id, u, v });
+  const groups = [];
   const axis = AXIS[from];
   const c0 = (axis === 'x' ? y : x) + (CELL - WALK) / 2;   // near edge of the lane
   const a0 = axis === 'x' ? x : y;                          // low end of the run
   const skip = skipFor([from, to]);
 
-  const put = (lo, len, top, thick, sk) => (axis === 'x'
-    ? bx(g, lo, c0, top - thick, len, WALK, thick, 's', 't', sk)
-    : bx(g, c0, lo, top - thick, WALK, len, thick, 's', 't', sk));
+  /* Each tread is its OWN group. That is not tidiness: the depth sort separates
+   * two boxes only when one lies entirely on the near side of the other along
+   * some axis, and a single group spanning the whole flight contains the
+   * traveller outright — no axis separates them, so the sort cannot say whether
+   * she is in front of the steps or behind them, and she sinks into the stairs.
+   * One box per tread gives her a surface whose top is exactly her feet. */
+  const put = (lo, len, top, thick, sk, part) => {
+    const g = group('slice', { slice: 'straight', id, u, v, part });
+    groups.push(g);
+    return axis === 'x'
+      ? bx(g, lo, c0, top - thick, len, WALK, thick, 's', 't', sk)
+      : bx(g, c0, lo, top - thick, WALK, len, thick, 's', 't', sk);
+  };
 
   const nav = { nodes: [], edges: [] };
   const pA = socketPos(u, v, from, z0);
   const pB = socketPos(u, v, to, z1);
 
   if (Math.abs(z1 - z0) < 1e-9) {
-    put(a0, CELL, z0, SLAB, skip);                         // one solid, no seams
+    put(a0, CELL, z0, SLAB, skip, 0);                      // one solid, no seams
     nav.nodes.push({ p: pA }, { p: pB });
     nav.edges.push([pA, pB]);
-    return { kind: 'straight', u, v, id, cells: [{ u, v }], groups: [g], sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
+    return { kind: 'straight', u, v, id, cells: [{ u, v }], groups, sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
   }
 
   // Rising. Tread i runs from the entry edge; heights step linearly so tread 0
@@ -284,7 +299,7 @@ export function straight(spec) {
     // The tread touching the '+' edge owns the face at that socket, so it is
     // interior; the risers between treads stay, because they are the steps.
     const sk = (up && i === TREADS - 1) || (!up && i === 0) ? skip : '';
-    put(a0 + off, T, top, SLAB + Math.abs(d), sk);
+    put(a0 + off, T, top, SLAB + Math.abs(d), sk, i);
     const p = axis === 'x'
       ? { x: a0 + off + T / 2, y: c0 + WALK / 2, z: top }
       : { x: c0 + WALK / 2, y: a0 + off + T / 2, z: top };
@@ -294,7 +309,7 @@ export function straight(spec) {
   }
   nav.edges.push([prev, pB]);
   nav.nodes.push({ p: pA }, { p: pB });
-  return { kind: 'straight', u, v, id, cells: [{ u, v }], groups: [g], sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
+  return { kind: 'straight', u, v, id, cells: [{ u, v }], groups, sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
 }
 
 /* ----------------------------------------------------------------- corner -- */
@@ -308,7 +323,8 @@ export function straight(spec) {
 export function corner(spec) {
   const { u, v, from, to, z0, z1, id } = spec;
   const { x, y } = cellOrigin(u, v);
-  const g = group('slice', { slice: 'corner', id, u, v });
+  const groups = [];
+  const g = group('slice', { slice: 'corner', id, u, v, part: 'flat' });
   const cx = x + CELL / 2, cy = y + CELL / 2, half = WALK / 2;
   const pA = socketPos(u, v, from, z0);
   const pB = socketPos(u, v, to, z1);
@@ -317,9 +333,9 @@ export function corner(spec) {
 
   /* One piece of the L: a span along `side`'s axis, WALK wide, centred on the
    * other axis. `sk` names the interior face it must not draw. */
-  const piece = (side, lo, len, top, thick, sk) => (AXIS[side] === 'x'
-    ? bx(g, lo, cy - half, top - thick, len, WALK, thick, 's', 't', sk)
-    : bx(g, cx - half, lo, top - thick, WALK, len, thick, 's', 't', sk));
+  const piece = (side, lo, len, top, thick, sk, own = g) => (AXIS[side] === 'x'
+    ? bx(own, lo, cy - half, top - thick, len, WALK, thick, 's', 't', sk)
+    : bx(own, cx - half, lo, top - thick, WALK, len, thick, 's', 't', sk));
 
   const mid = (side, lo, len, top) => (AXIS[side] === 'x'
     ? { x: lo + len / 2, y: cy, z: top }
@@ -344,38 +360,72 @@ export function corner(spec) {
     nav.nodes.push({ p: centre });
     nav.edges.push([pA, centre], [centre, pB]);
     return { kind: 'corner', u, v, id, cells: [{ u, v }], groups: [g], sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
+    /* the level corner is one group on purpose: every box in it tops out at z0,
+       which is exactly the traveller's feet, so the sort separates her cleanly */
   }
 
-  // Rising: four treads of CELL/4 along the L, two per arm, flush at both ends.
-  // Tread i sits at z0 + i*d with d = (z1-z0)/3, so tread 0 meets the entry
-  // edge at exactly z0 and tread 3 meets the exit edge at exactly z1.
-  const T = CELL / 4, d = (z1 - z0) / 3;
+  /* Rising: five surfaces along the L — two treads in, the landing, two out —
+   * flush with z0 at the entry edge and z1 at the exit edge, with a riser of
+   * (z1-z0)/4 each, the same as a straight flight.
+   *
+   * They must not overlap. An earlier version ran both arms across the full
+   * width of the turn, so the last tread in and the first tread out shared the
+   * corner square. Two boxes that overlap in x AND y and straddle each other in
+   * z cannot be separated by the depth sort, and the traveller standing on
+   * either of them sank into the other.
+   */
+  const d = (z1 - z0) / 4;
+  const arm = CELL / 2 - half;                            // edge to the landing
+  const T = arm / 2;
   const runs = [];
-  for (let i = 0; i < 2; i++) {                              // in, toward the centre
+  for (let i = 0; i < 2; i++) {                           // in, toward the centre
     const plus = SIGN[from] > 0;
-    runs.push({ side: from, lo: lo0(from) + (plus ? CELL - (i + 1) * T : i * T), top: z0 + i * d, outer: i === 0 });
+    runs.push({
+      side: from, len: T, top: z0 + i * d, outer: i === 0,
+      lo: lo0(from) + (plus ? CELL - (i + 1) * T : i * T),
+    });
   }
-  for (let i = 0; i < 2; i++) {                              // out, away from it
+  for (let i = 0; i < 2; i++) {                           // out, away from it
     const plus = SIGN[to] > 0;
-    runs.push({ side: to, lo: lo0(to) + CELL / 2 + (plus ? i * T : -(i + 1) * T), top: z0 + (i + 2) * d, outer: i === 1 });
+    runs.push({
+      side: to, len: T, top: z0 + (i + 3) * d, outer: i === 1,
+      lo: lo0(to) + (plus ? CELL / 2 + half + i * T : CELL / 2 - half - (i + 1) * T),
+    });
   }
 
   let prev = pA;
-  for (const r of runs) {
+  const emit = (r, i) => {
     // The only interior face is the one lying in an open socket's plane, and
     // only a '+' socket has a drawn face there. The rest are risers: keep them.
     const sk = r.outer && SIGN[r.side] > 0 ? (AXIS[r.side] === 'x' ? 'r' : 'l') : '';
-    piece(r.side, r.lo, T, r.top, SLAB + Math.abs(d), sk);
-    const p = mid(r.side, r.lo, T, r.top);
+    const own = group('slice', { slice: 'corner', id, u, v, part: i });   // see straight()
+    groups.push(own);
+    piece(r.side, r.lo, r.len, r.top, SLAB + Math.abs(d), sk, own);
+    const p = mid(r.side, r.lo, r.len, r.top);
     nav.nodes.push({ p });
     nav.edges.push([prev, p]);
     prev = p;
-  }
+  };
+
+  emit(runs[0], 0);
+  emit(runs[1], 1);
+
+  const pad = group('slice', { slice: 'corner', id, u, v, part: 'landing' });
+  groups.push(pad);
+  const zMid = z0 + 2 * d;
+  bx(pad, cx - half, cy - half, zMid - SLAB - Math.abs(d), WALK, WALK, SLAB + Math.abs(d), 's', 't',
+    (from === '+x' || to === '+x' ? 'r' : '') + (from === '+y' || to === '+y' ? 'l' : ''));
+  const centre = { x: cx, y: cy, z: zMid };
+  nav.nodes.push({ p: centre });
+  nav.edges.push([prev, centre]);
+  prev = centre;
+
+  emit(runs[2], 2);
+  emit(runs[3], 3);
+
   nav.edges.push([prev, pB]);
-  return { kind: 'corner', u, v, id, cells: [{ u, v }], groups: [g], sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
+  return { kind: 'corner', u, v, id, cells: [{ u, v }], groups, sockets: [{ u, v, side: from, z: z0 }, { u, v, side: to, z: z1 }], nav };
 }
-
-
 
 export const TEMPLATES = { court, straight, corner, crossing };
 
@@ -395,16 +445,23 @@ export const TEMPLATES = { court, straight, corner, crossing };
  * ustwo's trick of putting two nav nodes in one place with different roles,
  * seen from the other end.
  */
-export const HEADROOM = 3;   // levels of clearance required between the two paths
+/* Clearance between the two paths. It has to exceed the traveller's height plus
+ * the upper slab's thickness, or she walks through the bridge above her. */
+export const HEADROOM = 4;
 
 export function crossing(spec) {
   const { u, v, hi, lo, id } = spec;
   const { x, y } = cellOrigin(u, v);
-  const g = group('slice', { slice: 'crossing', id, u, v });
+  const groups = [];
   const nav = { nodes: [], edges: [] };
   const sockets = [];
 
+  // A group each, for the same reason the treads get one: a single box holding
+  // both decks contains the traveller when she walks the lower one, and the
+  // sort could then not tell whether she passes under the bridge or over it.
   for (const path of [lo, hi]) {
+    const g = group('slice', { slice: 'crossing', id, u, v, part: path === lo ? 'lo' : 'hi' });
+    groups.push(g);
     const axis = AXIS[path.from];
     const c0 = (axis === 'x' ? y : x) + (CELL - WALK) / 2;
     const a0 = axis === 'x' ? x : y;
@@ -419,5 +476,5 @@ export function crossing(spec) {
     sockets.push({ u, v, side: path.from, z: path.z }, { u, v, side: path.to, z: path.z });
   }
 
-  return { kind: 'crossing', u, v, id, cells: [{ u, v }], groups: [g], sockets, nav };
+  return { kind: 'crossing', u, v, id, cells: [{ u, v }], groups, sockets, nav };
 }

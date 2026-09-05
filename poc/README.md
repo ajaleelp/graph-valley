@@ -83,6 +83,27 @@ to know.
    off the plane. On failure the attempt is thrown away, the failed edge is
    promoted to the front of the queue, and everything is laid again.
 
+### One box per tread, and why it matters
+
+The depth sort can separate two boxes only when one lies entirely on the near
+side of the other along some axis. Where it cannot, the draw order falls back to
+an approximate key — and an approximate key is how the traveller ended up sunk
+into a flight of steps: the whole flight was a single group, and it contained
+her outright, so no axis separated them.
+
+So anything she can stand on or walk under is built from boxes she can be
+ordered against: **one group per stair tread**, one per arm of a rising corner,
+one per deck of a crossing, and a court split into base / far / near / overhead.
+`check.mjs` asserts it directly — for every walkable position in every world, no
+group is left unorderable against her.
+
+Two smaller rules fall out of the same requirement. Architecture stands back
+from a deck's edge further than she is wide, or a court's masses overlap her
+when she stands on that edge's socket. And an inlaid floor panel is sunk a hair
+*below* its surface rather than raised above it — a panel raised even 0.01
+lifted the group's bounding box past the deck top, and that top is exactly what
+separates the platform from whoever is standing on it.
+
 ### Why the stairs have five treads
 
 A flight must present its surface at exactly `z0` at the entry edge and exactly
@@ -112,6 +133,8 @@ Over six authored graphs and 200 random DAGs — 1442 assertions:
 - **the motion, not just the destination** — sampled at 60fps, the traveller
   starts and ends exactly on her endpoints, never leaves the nav polyline (to
   1e-6), never moves more than 1.5 units in a frame, and never descends;
+- **the traveller is sortable everywhere she can stand** — see below;
+- **she fits under every crossing**, with the upper slab's thickness counted;
 - **only the four templates** are ever instantiated;
 - **crossings clear** by at least `HEADROOM` levels and the nav graph keeps
   their two paths unjoined.

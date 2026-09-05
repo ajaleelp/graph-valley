@@ -89,7 +89,11 @@ if (world.problems.length) console.error('problems:\n  ' + world.problems.join('
 // --at <courtId> stands the traveller on that platform, sorted into the scene
 // exactly as the viewer would place her.
 const ai = process.argv.indexOf('--at');
-const where = ai > 0 ? world.courts.find((c) => c.id === process.argv[ai + 1]) : null;
+const arg = ai > 0 ? process.argv[ai + 1] : null;
+// --at takes a court id, or literal "x,y,z" coordinates for any walkable spot
+const where = !arg ? null
+  : arg.includes(',') ? { stand: Object.fromEntries(['x', 'y', 'z'].map((k, i) => [k, +arg.split(',')[i]])) }
+  : world.courts.find((c) => c.id === arg);
 await writeFile(file, toSVG(world, {
   labels: true,
   nav: process.argv.includes('--nav'),

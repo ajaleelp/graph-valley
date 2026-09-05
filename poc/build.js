@@ -125,16 +125,20 @@ export function build(graph) {
   // of a platform swallowed the click meant for it.
   for (const s of slices) {
     if (s.kind === 'court' || !s.nav.nodes.length) continue;
-    const cx = s.u * CELL + CELL / 2, cy = s.v * CELL + CELL / 2;
-    // nearest the cell centre, and where two paths cross, the upper one — that
-    // is the surface you can actually see and therefore the one you clicked.
-    const pick = s.nav.nodes.map((n) => n.p).sort((a, b) =>
-      (Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)) || (b.z - a.z))[0];
     const climbs = s.sockets.length >= 2 && Math.abs(s.sockets[0].z - s.sockets[1].z) > 1e-9;
     const label = s.kind === 'crossing' ? 'the crossing'
       : s.kind === 'corner' ? 'the turn'
       : climbs ? 'the stairs' : 'the walkway';
-    for (const g of s.groups) { g.navAt = pick; g.navLabel = label; }
+    // Per GROUP, not per slice. A flight is one group per tread, so this lands
+    // you on the step you actually clicked; at a crossing it also picks the
+    // right one of the two paths, since each deck is its own group.
+    for (const g of s.groups) {
+      const gx = (g.x0 + g.x1) / 2, gy = (g.y0 + g.y1) / 2, gz = g.z1;
+      g.navAt = s.nav.nodes.map((n) => n.p).sort((a, b) =>
+        Math.hypot(a.x - gx, a.y - gy, (a.z - gz) * 2)
+        - Math.hypot(b.x - gx, b.y - gy, (b.z - gz) * 2))[0];
+      g.navLabel = label;
+    }
   }
 
   const groups = slices.flatMap((s) => s.groups);

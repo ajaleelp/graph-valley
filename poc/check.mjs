@@ -8,8 +8,9 @@
 import { build } from './build.js';
 import { GRAPHS, randomGraph } from './graphs.js';
 import { findWalk, reachable } from './nav.js';
-import { plan, at, duration } from './walk.js';
-import { OPP, DELTA, socketPos, HEADROOM, AXIS } from './slices.js';
+import { plan, at, duration, traveller, HEIGHT, HALF } from './walk.js';
+import { OPP, DELTA, socketPos, HEADROOM, AXIS, SLAB, INSET } from './slices.js';
+import { order as frontOf } from './iso.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -93,7 +94,12 @@ function verify(name, graph) {
     for (const k of s.sockets) byAxis[AXIS[k.side]].push(k.z);
     const zx = byAxis.x[0], zy = byAxis.y[0];
     if (byAxis.x.length !== 2 || byAxis.y.length !== 2) { crossOk = false; crossDetail = `${s.id} is not two paths`; break; }
-    if (Math.abs(zx - zy) < HEADROOM) { crossOk = false; crossDetail = `${s.id} clearance ${Math.abs(zx - zy)}`; break; }
+    // and she has to fit underneath it, not merely miss it
+    if (Math.abs(zx - zy) - SLAB < HEIGHT) {
+      crossOk = false;
+      crossDetail = `${s.id} headroom ${(Math.abs(zx - zy) - SLAB).toFixed(2)} < traveller ${HEIGHT}`;
+      break;
+    }
     const kx = navKeyOf(socketPos(s.u, s.v, byAxis.x === byAxis.x ? '-x' : '-x', zx));
     const ky = navKeyOf(socketPos(s.u, s.v, '-y', zy));
     if (w.nav.adj.get(kx) && w.nav.adj.get(kx).has(ky)) { crossOk = false; crossDetail = `${s.id} joins its two paths`; break; }
@@ -160,6 +166,27 @@ function verify(name, graph) {
     check(`${name}: no visible jump`, jump <= 1.5, `${jump.toFixed(3)} units in one frame`);
     check(`${name}: walk never goes backwards`, regress === 0, `${regress} frames`);
   }
+
+  // 9. The traveller can be placed EXACTLY, everywhere she can stand.
+  //
+  //    The depth sort separates two boxes only when one lies entirely on the
+  //    near side of the other along some axis. Where it cannot, the draw order
+  //    falls back to an approximate key — which is how she came to sink into a
+  //    flight of steps: the whole flight was one group, and it contained her.
+  //    Every walkable position must leave her orderable against every group.
+  let sunk = null, sunkAt = 0;
+  for (const [, p] of w.nav.pos) {
+    const her = traveller(p);
+    const bad = w.groups.find((g) => frontOf(her, g) === 0);
+    if (bad) {
+      sunkAt++;
+      if (!sunk) sunk = `at ${p.x},${p.y},${p.z} vs ${bad.slice || bad.kind}:${bad.part ?? ''} ${bad.id || ''}`;
+    }
+  }
+  check(`${name}: traveller sortable everywhere`, !sunk, `${sunkAt} spot(s), e.g. ${sunk}`);
+
+  // ...and the geometry has to leave room for her in the first place.
+  check(`${name}: architecture clears the traveller`, HALF < INSET, `${HALF} >= ${INSET}`);
 
   return w;
 }

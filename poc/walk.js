@@ -12,6 +12,9 @@
 
 import { group, bx, sortShapes } from './iso.js';
 
+export const HEIGHT = 2.4;   // total, feet to crown
+export const HALF = 0.55;    // half-width; must stay under slices.INSET
+
 /* Vertical distance is discounted: a step up a stair is less far than the same
  * number of units along the ground, and pacing by raw 3D length makes flights
  * feel slow. */
@@ -60,9 +63,11 @@ export function duration(total) {
  */
 export function traveller(p) {
   const g = group('you');
-  bx(g, p.x - 0.8, p.y - 0.8, p.z, 1.6, 1.6, 0.01, 'shadow');
-  bx(g, p.x - 0.6, p.y - 0.6, p.z, 1.2, 1.2, 1.7, 'body');
-  bx(g, p.x - 0.72, p.y - 0.72, p.z + 1.7, 1.44, 1.44, 0.42, 'brim');
-  bx(g, p.x - 0.45, p.y - 0.45, p.z + 2.12, 0.9, 0.9, 0.85, 'head');
+  // Her footprint has to stay clear of the next tread up (1.6 units along the
+  // run), and her height has to fit under a crossing: HEADROOM - SLAB.
+  bx(g, p.x - HALF, p.y - HALF, p.z, 2 * HALF, 2 * HALF, 0.01, 'shadow');
+  bx(g, p.x - 0.46, p.y - 0.46, p.z, 0.92, 0.92, 1.35, 'body');
+  bx(g, p.x - HALF, p.y - HALF, p.z + 1.35, 2 * HALF, 2 * HALF, 0.37, 'brim');
+  bx(g, p.x - 0.34, p.y - 0.34, p.z + 1.72, 0.68, 0.68, 0.68, 'head');
   return sortShapes(g);
 }
