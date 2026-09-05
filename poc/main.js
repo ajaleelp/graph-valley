@@ -27,7 +27,8 @@ const S = { world: null, view: { x: 0, y: 0, k: 1 }, at: null, walking: false, e
 
 function drawGroup(g) {
   const node = el('g', { class: g.kind === 'you' ? 'you' : g.slice === 'court' ? 'court' : 'link' });
-  if (g.id) node.dataset.id = g.id;
+  if (g.slice === 'court' && g.id) node.dataset.id = g.id;
+  if (g.navAt) { node.dataset.nav = navKey(g.navAt); node.dataset.label = g.navLabel || 'the path'; }
   for (const s of g.shapes) {
     node.appendChild(s.tag === 'path'
       ? el('path', { class: s.cls, d: s.d })
@@ -160,7 +161,14 @@ function stop() {
 
 function walkTo(courtId) {
   const c = S.world.courts.find((q) => q.id === courtId);
-  if (!c || !S.at || c.navKey === navKey(S.at)) return;
+  if (!c) return;
+  walkToNode(c.navKey, c.title || c.id, c.stand);
+}
+
+/* Walk to any nav node. Courts are just the named case. */
+function walkToNode(target, label, snap) {
+  if (!S.at || !S.world.nav.pos.has(target) || target === navKey(S.at)) return;
+  const dest = snap || S.world.nav.pos.get(target);
 
   // Interrupting mid-walk re-paths from the node she is standing nearest, with
   // her exact position kept on the front so she carries on from where she is
@@ -168,7 +176,7 @@ function walkTo(courtId) {
   const here = { ...S.at };
   const from = S.walking ? nearestNode(S.world.nav, here) : navKey(here);
   stop();
-  const found = findWalk(S.world.nav, from, c.navKey);
+  const found = findWalk(S.world.nav, from, target);
   if (!found || found.length < 2) return;
   const path = navKey(found[0]) === navKey(here) ? found : [here, ...found];
 
@@ -177,17 +185,17 @@ function walkTo(courtId) {
   const t0 = performance.now();
   S.walking = true;
   showRoute(path);
-  setStatus(`walking to ${c.title || c.id}`);
+  setStatus(`walking to ${label}`);
 
   // requestAnimationFrame does not fire while the tab is hidden, and a walk
   // that never finishes leaves S.walking true forever and makes the whole world
   // unclickable. The guard promises the walk always ends.
   const arrive = () => {
     stop();
-    S.at = { ...c.stand };
+    S.at = { ...dest };
     placeTraveller();
     showRoute(null);
-    setStatus(`at ${c.title || c.id}`);
+    setStatus(`at ${label}`);
   };
   guard = setTimeout(arrive, dur + 500);
 
@@ -252,27 +260,66 @@ function load(key) {
 
 /* pan, zoom, click ---------------------------------------------------------- */
 
+/* The click target is read at POINTERDOWN, not at pointerup.
+ *
+ * setPointerCapture retargets every subsequent event for that pointer to the
+ * capture element, so by pointerup e.target IS the <svg> and closest('.court')
+ * is null no matter what you clicked on. Capture is still worth having — it
+ * keeps a drag alive when the pointer leaves the window — so the fix is to
+ * remember what was actually under the pointer when it went down. */
 let drag = null;
+
+/* What a press landed on: a named court, or any other walkable surface. */
+const targetUnder = (node) => {
+  if (!node || !node.closest) return null;
+  const court = node.closest('.court');
+  if (court && court.dataset.id) return { court: court.dataset.id };
+  const link = node.closest('.link');
+  if (link && link.dataset.nav) return { nav: link.dataset.nav, label: link.dataset.label };
+  return null;
+};
+
 svg.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY, vx: S.view.x, vy: S.view.y, moved: false };
-  svg.setPointerCapture(e.pointerId);
+  drag = {
+    x: e.clientX, y: e.clientY,
+    vx: S.view.x, vy: S.view.y,
+    moved: false,
+    hit: targetUnder(e.target),
+    id: e.pointerId,
+  };
+  try { svg.setPointerCapture(e.pointerId); } catch { /* some pointers refuse it */ }
   svg.classList.add('dragging');
 });
+
 svg.addEventListener('pointermove', (e) => {
-  if (!drag) return;
+  if (!drag || e.pointerId !== drag.id) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-  S.view.x = drag.vx + dx; S.view.y = drag.vy + dy;
+  // A few pixels of tremor between press and release is a click, not a drag.
+  if (Math.hypot(dx, dy) > 5) drag.moved = true;
+  S.view.x = drag.vx + dx;
+  S.view.y = drag.vy + dy;
   applyView();
 });
-svg.addEventListener('pointerup', (e) => {
-  const wasDrag = drag && drag.moved;
+
+const endDrag = (e) => {
+  if (!drag || (e && e.pointerId !== drag.id)) return null;
+  const d = drag;
   drag = null;
   svg.classList.remove('dragging');
-  if (wasDrag) return;
-  const court = e.target.closest('.court');
-  if (court && court.dataset.id) walkTo(court.dataset.id);
+  try { if (e) svg.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+  return d;
+};
+
+svg.addEventListener('pointerup', (e) => {
+  const d = endDrag(e);
+  if (!d || d.moved || !d.hit) return;
+  if (d.hit.court) walkTo(d.hit.court);
+  else walkToNode(d.hit.nav, d.hit.label || 'the path');
 });
+// A cancelled gesture must not leave a half-open drag behind, or the next
+// press inherits it and the click after that is swallowed as a drag.
+svg.addEventListener('pointercancel', endDrag);
+
 svg.addEventListener('wheel', (e) => {
   e.preventDefault();
   const k = Math.max(0.15, Math.min(3, S.view.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
@@ -297,7 +344,7 @@ for (const id of ['nav', 'labels', 'cells']) {
 window.addEventListener('resize', () => { fit(S.world); applyView(); });
 
 // A handle for driving the viewer from the console or a test harness.
-window.poc = { S, load, applyView, walkTo, focus(id) {
+window.poc = { S, load, applyView, walkTo, walkToNode, targetUnder, focus(id) {
   const c = S.world.courts.find((q) => q.id === id) || S.world.courts[0];
   const p = P(c.stand.x, c.stand.y, c.stand.z);
   const W = svg.clientWidth, H = svg.clientHeight;

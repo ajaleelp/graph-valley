@@ -118,6 +118,25 @@ export function build(graph) {
 
   /* ---- scene ------------------------------------------------------------ */
 
+  // Every walkable surface is a destination, not just the courts. Each link
+  // slice stamps a representative nav node onto its groups so the viewer can
+  // turn a click on a walkway into a walk to that spot — which is how Monument
+  // Valley behaves, and it removes the dead zones where a bridge drawn in front
+  // of a platform swallowed the click meant for it.
+  for (const s of slices) {
+    if (s.kind === 'court' || !s.nav.nodes.length) continue;
+    const cx = s.u * CELL + CELL / 2, cy = s.v * CELL + CELL / 2;
+    // nearest the cell centre, and where two paths cross, the upper one — that
+    // is the surface you can actually see and therefore the one you clicked.
+    const pick = s.nav.nodes.map((n) => n.p).sort((a, b) =>
+      (Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy)) || (b.z - a.z))[0];
+    const climbs = s.sockets.length >= 2 && Math.abs(s.sockets[0].z - s.sockets[1].z) > 1e-9;
+    const label = s.kind === 'crossing' ? 'the crossing'
+      : s.kind === 'corner' ? 'the turn'
+      : climbs ? 'the stairs' : 'the walkway';
+    for (const g of s.groups) { g.navAt = pick; g.navLabel = label; }
+  }
+
   const groups = slices.flatMap((s) => s.groups);
   for (const g of groups) sortShapes(g);
 

@@ -16,10 +16,11 @@ node poc/serve.mjs                              # viewer at http://localhost:517
 node poc/render.mjs deep out.svg --at p4 --nav  # render a world to a file
 ```
 
-In the viewer: **click any platform to walk there.** You can click a new one
-mid-walk — she re-paths from where she is standing rather than snapping back.
-Drag to pan, scroll to zoom, and the toggles overlay the nav graph and the
-slice kinds.
+In the viewer: **click any platform — or any walkway — to walk there.** Every
+walkable surface is a destination, not just the courts. You can click a new spot
+mid-walk and she re-paths from where she is standing rather than snapping back.
+Drag to pan, scroll to zoom, and the toggles overlay the nav graph and the slice
+kinds.
 
 ---
 

@@ -63,11 +63,16 @@ dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
 .n-t { fill: var(--n-t); } .n-l { fill: var(--n-l); } .n-r { fill: var(--n-r); }
 .a-t { fill: var(--a-t); } .a-l { fill: var(--a-l); } .a-r { fill: var(--a-r); }
 
-.court { cursor: pointer; }
+.court, .link { cursor: pointer; }
 .court:hover .t-t { fill: #fff; }
 .court:hover .s-t { fill: #fbf7f0; }
+.link:hover .t-t { fill: #fff; }
 
 /* --- overlays ----------------------------------------------------------- */
+/* Every overlay sits ABOVE the scene, so without this they eat the clicks
+ * meant for the platforms underneath them. */
+#navlayer, #routelayer, .label, .kind { pointer-events: none; }
+
 #navlayer line { stroke: #2f6f6b; stroke-width: 1.6; opacity: 0.5; }
 #navlayer circle { fill: #2f6f6b; opacity: 0.75; }
 
