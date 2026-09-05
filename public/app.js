@@ -770,7 +770,7 @@ function positionChoice() {
   const p = P(avatarPos.x, avatarPos.y, avatarPos.z);
   const sx = p.x * view.k + view.x, sy = p.y * view.k + view.y;
   c.style.left = clamp(sx - c.offsetWidth / 2, 12, r.width - c.offsetWidth - 12) + 'px';
-  c.style.top = Math.max(84, sy - 70 * view.k - c.offsetHeight) + 'px';
+  c.style.top = Math.max(84, sy - 78 - 26 * view.k - c.offsetHeight) + 'px';
 }
 
 /* ------------------------------ celebration ----------------------------- */
