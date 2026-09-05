@@ -57,10 +57,13 @@ not look like the reference.
    was the peak of the complexity, and it was the wrong direction: it read as
    clutter, and nearly all the geometry went into the connections rather than
    the places.
-6. **A dungeon-crawl trail** (current) — small floating platforms, one piece of
-   architecture on each, joined by plain walkways and stairs. Monument Valley
-   is the register, not a blueprint. `world.js` went from about 700 lines to
-   450 and from ~2000 shapes per world to ~750.
+6. **A dungeon-crawl trail** (current in `public/`) — small floating platforms,
+   one piece of architecture on each, joined by plain walkways and stairs.
+   Monument Valley is the register, not a blueprint. `world.js` went from about
+   700 lines to 450 and from ~2000 shapes per world to ~750.
+7. **A slice-and-socket system** (`poc/`, proven, not yet adopted) — the world
+   assembled from four reusable templates that stitch by a stated contract
+   rather than by bespoke geometry per node. See section 6.
 
 ### What the isometric rewrite fixed, and why those fixes still stand
 
@@ -185,13 +188,112 @@ which silently made the entire world unclickable. Every walk now has a
 
 ---
 
-## 5. Immediate next steps (ranked)
+## 5. The main product needs overhauling to match `poc/`
 
-1. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
-   possible; a bridge that swings to connect two decks when you tap it. The grid
-   and the exact depth sort now make this buildable.
-2. **Switchback causeways** — would let the world climb steeply while keeping
-   the staircases gentle, and would make the layout far more compact.
+`poc/` is an independent proof that a concept graph can be turned into a
+walkable Monument Valley world from **four reusable slice templates** stitched
+by a socket contract — see `poc/README.md`. It works, it is verified by 3090
+headless assertions over six authored graphs and 200 random DAGs, and it is
+better than what `public/` does in ways that are structural rather than
+cosmetic. The main renderer should be rebuilt on it. Until then this repo
+carries two world-builders that disagree.
+
+### What `public/` would gain
+
+- **Seamlessness becomes checkable.** Today `world.js` joins platforms with a
+  bespoke `run()` / `link()` pair and the joins are correct because they were
+  eyeballed. Under the socket contract two slices stitch iff their facing
+  sockets are open at the same height, so `check.mjs` asserts every seam in
+  every world instead of trusting a reading.
+- **Walkability stops being a parallel system.** `app.js` routes over
+  `edges[].walk` polylines that `world.js` emits alongside the geometry — two
+  representations that must be kept in step by hand. In the POC each slice puts
+  a nav node at each open socket, so the nav graph is connected *iff* the
+  geometry is stitched. It is the same fact, not a copy of it.
+- **Paths can cross.** Orthogonal routes that own their cells cannot always be
+  drawn in the plane; 13 of 200 random DAGs partition the grid and cannot be
+  laid out at all. The `crossing` slice fixes that, and one path passing over
+  another is the single most Monument Valley thing in the reference.
+- **Layout is routed, not placed.** The serpentine trail in `world.js` is a
+  fixed shape that the graph is poured into. The POC routes each edge with a
+  turn penalty, rip-up and retry, and barycentre lane ordering, so the world
+  takes the shape of the graph rather than the other way round.
+
+### Bugs `public/` still has that `poc/` has fixed
+
+These are latent in the shipped renderer today, found while fixing them in the
+POC:
+
+- **The avatar can be painted over by the walkway she is standing on.**
+  `world.js` builds a whole causeway leg — every stair tread included — as one
+  group. The depth sort separates two boxes only when one lies entirely on the
+  near side of the other along some axis, and a leg's box *contains* her, so no
+  axis separates them. `sortAvatar` in `app.js` then falls back to an
+  approximate placement. Fix: one group per tread, per corner arm, per crossing
+  deck.
+- **`sortAvatar` satisfies only half its constraint.** It walks the visible
+  order accumulating the last index of a group entirely behind her, and inserts
+  there. That ignores every group she must be drawn *before*. It is the safer
+  of the two one-sided choices — the POC picked the other half and she sank
+  through the floor — but it is unsound for the same reason: the draw order is
+  a topological sort of a *partial* order, so incomparable groups are separated
+  by an arbitrary tie-break and no single slot need satisfy both ends. Fix:
+  sort her into the scene each frame. It costs 0.3ms on the largest POC world,
+  two per cent of a frame, so the optimisation was never worth its risk.
+- **A single scalar painter's key cannot order stacked solids.** `sortShapes`
+  in `public/iso.js` sorts a group's shapes by their near corner. That cannot
+  express "the deck is above its own root" and "the deck is behind the column
+  standing on it" at once. In the POC a court's root painted a dark rhombus
+  across its own deck until solids inside a group were ordered by the same
+  exact topological sort used between groups.
+- **A raised floor decoration breaks the platform's separation.** `faceT` lifts
+  an inlaid panel a hair above its surface so it sorts on top. That lifts the
+  whole group's bounding box past the deck top — and the deck top is exactly
+  what separates a platform from whoever stands on it. Sink the panel below the
+  surface instead; being inset, it still sorts above on the tie-break.
+
+### What `poc/` does not have yet
+
+Adoption is a rebuild of `world.js` and the rendering half of `app.js`, not a
+drop-in. The POC deliberately omits everything the product needs around the
+world:
+
+- lessons, the comprehension check, unlock state and progress colouring;
+- mist and the reveal of distant content, which is a real design idea in
+  `public/` and worth keeping;
+- asking at the fork — the junction logic in `app.js` that walks her out to
+  where onward paths diverge before asking which way;
+- the LLM graph endpoint and its validator, which are orthogonal and fine.
+
+Worlds also come out **wider** in the POC: depth runs horizontally, so a
+nine-deep curriculum is a long band rather than a single-screen composition.
+`public/`'s serpentine folds the trail back on itself to stay compact. Some
+version of that fold should be recovered — probably as a routing constraint
+rather than a fixed layout.
+
+### Suggested order
+
+1. Port `poc/iso.js` over `public/iso.js` — the per-solid topological sort,
+   interior-face suppression and the `faceT` fix are strict improvements and
+   are independent of the slice system.
+2. Fix `sortAvatar` to sort her into the scene, and split causeway legs per
+   tread. That removes the visible defects without touching layout.
+3. Replace `world.js` with the slice pipeline, keeping `app.js`'s reveal,
+   unlock and fork behaviour on top of the new nav graph.
+4. Recover compactness — fold the routed layout so a long curriculum still
+   reads on one screen.
+
+---
+
+## 6. Immediate next steps (ranked)
+
+1. **Rebuild `public/` on the slice system** (section 5). It supersedes items 2
+   and 3 of the old list: switchbacks become a routing constraint, and the
+   crossing slice already does what the bypass logic was reaching for.
+2. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
+   possible; a bridge that swings to connect two decks when you tap it. Easier
+   under the socket contract than before: a pivot is a slice whose socket moves
+   from one side to another, and the seam check says whether it has landed.
 3. **Global journey cache + pre-review** of popular topics (cost + quality).
 4. **Clarifying question before generation** (level/scope) — biggest curriculum
    quality win.

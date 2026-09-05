@@ -4,6 +4,14 @@
 > not built yet. See [What isn't built yet](#what-isnt-built-yet) before judging
 > this as a learning tool — right now it is a prototype of an *idea about
 > learning*, not something that will actually teach you anything.
+>
+> **The renderer is also mid-replacement.** `poc/` is a proven, independently
+> verified rebuild of the world as four reusable slice templates stitched by a
+> socket contract, and `public/` should be rebuilt on it — it makes
+> seamlessness and walkability assertable rather than eyeballed, lets paths
+> cross, and fixes depth-sorting bugs the shipped renderer still has. See
+> [poc/README.md](poc/README.md) and section 5 of
+> [CHALLENGES.md](CHALLENGES.md).
 
 **Type a goal. Walk the path. Reach the summit.**
 
