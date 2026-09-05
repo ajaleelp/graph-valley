@@ -48,6 +48,8 @@ dt { opacity: 0.6; }
 dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
 .hint { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid #e6dbcb;
   opacity: 0.5; font-size: 12px; }
+#status { margin: 9px 0 0; padding-top: 9px; border-top: 1px solid #e6dbcb;
+  font-weight: 560; color: var(--you); }
 
 #problems {
   position: absolute; left: 24px; bottom: 20px; max-width: 380px;
@@ -63,6 +65,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
 
 .court { cursor: pointer; }
 .court:hover .t-t { fill: #fff; }
+.court:hover .s-t { fill: #fbf7f0; }
 
 /* --- overlays ----------------------------------------------------------- */
 #navlayer line { stroke: #2f6f6b; stroke-width: 1.6; opacity: 0.5; }
@@ -73,5 +76,14 @@ dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
 
 .kind text { font: 700 11px ui-monospace, monospace; fill: #8b7c68; }
 
-.you .body { fill: var(--you); }
-.you .head { fill: #3d8b85; }
+.you { pointer-events: none; }
+.you .body-t { fill: #3a8580; } .you .body-l { fill: #2f6f6b; } .you .body-r { fill: #255a57; }
+.you .head-t { fill: #f5e2c8; } .you .head-l { fill: #e2ccae; } .you .head-r { fill: #cbb193; }
+.you .brim-t { fill: #d4623f; } .you .brim-l { fill: #b95034; } .you .brim-r { fill: #9c4029; }
+.you .shadow-t { fill: #6b5c48; opacity: 0.16; }
+.you .shadow-l, .you .shadow-r { display: none; }
+
+#routelayer polyline {
+  fill: none; stroke: var(--you); stroke-width: 2.4; opacity: 0.55;
+  stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 7 7;
+}

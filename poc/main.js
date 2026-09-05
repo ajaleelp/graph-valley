@@ -6,11 +6,12 @@
  * order rather than re-rendering the scene.
  */
 
-import { P, order as frontOf, group, bx, depthSort, sortShapes } from './iso.js';
+import { P, order as frontOf, depthSort } from './iso.js';
 import { build } from './build.js';
 import { CELL } from './slices.js';
 import { GRAPHS } from './graphs.js';
-import { findWalk } from './nav.js';
+import { findWalk, nearestNode, navKey } from './nav.js';
+import { plan, at, duration, traveller } from './walk.js';
 
 const svg = document.getElementById('stage');
 const NS = 'http://www.w3.org/2000/svg';
@@ -23,15 +24,6 @@ const el = (tag, attrs = {}) => {
 const S = { world: null, view: { x: 0, y: 0, k: 1 }, at: null, walking: false, els: [], order: [] };
 
 /* ------------------------------------------------------------- traveller -- */
-
-/* A body and a head, as one group with a compact box, so the depth sort can
- * place her among the architecture rather than always on top of it. */
-function traveller(p) {
-  const g = group('you');
-  bx(g, p.x - 0.42, p.y - 0.42, p.z, 0.84, 0.84, 1.5, 'body');
-  bx(g, p.x - 0.34, p.y - 0.34, p.z + 1.5, 0.68, 0.68, 0.7, 'head');
-  return sortShapes(g);
-}
 
 function drawGroup(g) {
   const node = el('g', { class: g.kind === 'you' ? 'you' : g.slice === 'court' ? 'court' : 'link' });
@@ -53,14 +45,15 @@ function insertionIndex(sorted, her) {
 
 /* ----------------------------------------------------------------- scene -- */
 
-let scene, navLayer, labelLayer, youEl = null, labels = [];
+let scene, navLayer, routeLayer, labelLayer, youEl = null, labels = [];
 
 function render(world) {
   svg.replaceChildren();
   scene = el('g');
+  routeLayer = el('g', { id: 'routelayer' });
   navLayer = el('g', { id: 'navlayer' });
   labelLayer = el('g');
-  svg.append(scene, navLayer, labelLayer);
+  svg.append(scene, routeLayer, navLayer, labelLayer);
 
   S.order = depthSort(world.groups);
   S.els = S.order.map((g) => {
@@ -125,8 +118,10 @@ function placeTraveller() {
 
 function applyView() {
   const { x, y, k } = S.view;
-  scene.setAttribute('transform', `translate(${x} ${y}) scale(${k})`);
-  navLayer.setAttribute('transform', `translate(${x} ${y}) scale(${k})`);
+  const t = `translate(${x} ${y}) scale(${k})`;
+  scene.setAttribute('transform', t);
+  routeLayer.setAttribute('transform', t);
+  navLayer.setAttribute('transform', t);
   for (const l of labels) {
     l.node.setAttribute('transform', `translate(${x + l.p.x * k} ${y + l.p.y * k + l.dy})`);
     const t = l.node.querySelector('text');
@@ -148,52 +143,71 @@ function fit(world) {
 
 /* ------------------------------------------------------------------ walk -- */
 
-function walkTo(courtId) {
-  if (S.walking) return;
-  const c = S.world.courts.find((q) => q.id === courtId);
-  if (!c || !S.at) return;
-  const from = `${S.at.x.toFixed(3)},${S.at.y.toFixed(3)},${S.at.z.toFixed(3)}`;
-  const path = findWalk(S.world.nav, from, c.navKey);
-  if (!path || path.length < 2) return;
+function showRoute(path) {
+  routeLayer.replaceChildren();
+  if (!path) return;
+  const pts = path.map((q) => { const p = P(q.x, q.y, q.z); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; });
+  routeLayer.appendChild(el('polyline', { points: pts.join(' ') }));
+}
 
-  // constant speed along the polyline, so stairs do not read as teleports
-  const seg = [];
-  let total = 0;
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1], b = path[i];
-    const d = Math.hypot(b.x - a.x, b.y - a.y, (b.z - a.z) * 0.7) || 0.001;
-    seg.push(d); total += d;
-  }
-  const dur = Math.min(6000, total * 70);
+let raf = null, guard = null;
+
+function stop() {
+  cancelAnimationFrame(raf);
+  clearTimeout(guard);
+  S.walking = false;
+}
+
+function walkTo(courtId) {
+  const c = S.world.courts.find((q) => q.id === courtId);
+  if (!c || !S.at || c.navKey === navKey(S.at)) return;
+
+  // Interrupting mid-walk re-paths from the node she is standing nearest, with
+  // her exact position kept on the front so she carries on from where she is
+  // rather than snapping to a nav node.
+  const here = { ...S.at };
+  const from = S.walking ? nearestNode(S.world.nav, here) : navKey(here);
+  stop();
+  const found = findWalk(S.world.nav, from, c.navKey);
+  if (!found || found.length < 2) return;
+  const path = navKey(found[0]) === navKey(here) ? found : [here, ...found];
+
+  const pl = plan(path);
+  const dur = duration(pl.total);
   const t0 = performance.now();
   S.walking = true;
+  showRoute(path);
+  setStatus(`walking to ${c.title || c.id}`);
 
   // requestAnimationFrame does not fire while the tab is hidden, and a walk
   // that never finishes leaves S.walking true forever and makes the whole world
   // unclickable. The guard promises the walk always ends.
   const arrive = () => {
-    clearTimeout(guard);
+    stop();
     S.at = { ...c.stand };
     placeTraveller();
-    S.walking = false;
+    showRoute(null);
+    setStatus(`at ${c.title || c.id}`);
   };
-  const guard = setTimeout(arrive, dur + 500);
+  guard = setTimeout(arrive, dur + 500);
 
   const step = () => {
     if (!S.walking) return;
-    const u = Math.min(1, (performance.now() - t0) / dur);
-    let want = u * total, i = 0;
-    while (i < seg.length - 1 && want > seg[i]) { want -= seg[i]; i++; }
-    const a = path[i], b = path[i + 1], f = Math.min(1, want / seg[i]);
-    S.at = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f };
+    const u = (performance.now() - t0) / dur;
+    S.at = at(pl, u);
     placeTraveller();
-    if (u < 1) return requestAnimationFrame(step);
+    if (u < 1) { raf = requestAnimationFrame(step); return; }
     arrive();
   };
-  requestAnimationFrame(step);
+  raf = requestAnimationFrame(step);
 }
 
 /* ------------------------------------------------------------------- ui --- */
+
+function setStatus(text) {
+  const n = document.getElementById('status');
+  if (n) n.textContent = text;
+}
 
 function syncToggles() {
   navLayer.style.display = document.getElementById('nav').checked ? '' : 'none';
@@ -227,11 +241,13 @@ function load(key) {
   const world = build(GRAPHS[key]);
   S.world = world;
   const start = world.courts.find((c) => c.depth === 0);
+  stop();
   S.at = { ...start.stand };
-  S.walking = false;
+  if (routeLayer) showRoute(null);
   fit(world);
   render(world);
   stats(world);
+  setStatus(`at ${start.title || start.id}`);
 }
 
 /* pan, zoom, click ---------------------------------------------------------- */

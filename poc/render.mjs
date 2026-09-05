@@ -10,6 +10,7 @@ import { writeFile } from 'node:fs/promises';
 import { build } from './build.js';
 import { GRAPHS } from './graphs.js';
 import { P, depthSort } from './iso.js';
+import { traveller } from './walk.js';
 import { CELL } from './slices.js';
 
 const PALETTE = {
@@ -18,9 +19,12 @@ const PALETTE = {
   't-t': '#fbf6ed', 't-l': '#e3d8c9', 't-r': '#cdc0af',
   'n-t': '#b5a897', 'n-l': '#9a8d7c', 'n-r': '#82766a',
   'a-t': '#f0a35e', 'a-l': '#d98b47', 'a-r': '#bd7434',
+  'body-t': '#3a8580', 'body-l': '#2f6f6b', 'body-r': '#255a57',
+  'head-t': '#f5e2c8', 'head-l': '#e2ccae', 'head-r': '#cbb193',
+  'brim-t': '#d4623f', 'brim-l': '#b95034', 'brim-r': '#9c4029',
 };
 
-export function toSVG(world, { labels = true, nav = false, pad = 60 } = {}) {
+export function toSVG(world, { labels = true, nav = false, at = null, pad = 60 } = {}) {
   const b = world.bounds;
   const W = b.x1 - b.x0 + pad * 2, H = b.y1 - b.y0 + pad * 2;
   const FONT = Math.max(15, Math.round(W / 90));
@@ -33,8 +37,15 @@ export function toSVG(world, { labels = true, nav = false, pad = 60 } = {}) {
     '.nav line{stroke:#2f6f6b;stroke-width:2;opacity:.5}.nav circle{fill:#2f6f6b;opacity:.8}' +
     '</style>');
 
-  for (const g of depthSort(world.groups)) {
-    for (const s of g.shapes) out.push(`<polygon class="${s.cls}" points="${s.pts}"/>`);
+  const extra = at ? [traveller(at)] : [];
+  for (const g of depthSort(world.groups.concat(extra))) {
+    for (const s of g.shapes) {
+      if (s.cls.startsWith('shadow')) {
+        if (s.cls === 'shadow-t') out.push(`<polygon points="${s.pts}" fill="#6b5c48" opacity="0.16"/>`);
+        continue;
+      }
+      out.push(`<polygon class="${s.cls}" points="${s.pts}"/>`);
+    }
   }
 
   if (nav) {
@@ -75,5 +86,13 @@ if (!GRAPHS[key]) {
 }
 const world = build(GRAPHS[key]);
 if (world.problems.length) console.error('problems:\n  ' + world.problems.join('\n  '));
-await writeFile(file, toSVG(world, { labels: true, nav: process.argv.includes('--nav') }));
+// --at <courtId> stands the traveller on that platform, sorted into the scene
+// exactly as the viewer would place her.
+const ai = process.argv.indexOf('--at');
+const where = ai > 0 ? world.courts.find((c) => c.id === process.argv[ai + 1]) : null;
+await writeFile(file, toSVG(world, {
+  labels: true,
+  nav: process.argv.includes('--nav'),
+  at: where ? where.stand : null,
+}));
 console.log(`${file}  ${world.stats.courts} courts, ${world.stats.straights + world.stats.corners + world.stats.crossings} link slices, ${world.stats.shapes} polygons`);

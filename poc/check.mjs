@@ -8,6 +8,7 @@
 import { build } from './build.js';
 import { GRAPHS, randomGraph } from './graphs.js';
 import { findWalk, reachable } from './nav.js';
+import { plan, at, duration } from './walk.js';
 import { OPP, DELTA, socketPos, HEADROOM, AXIS } from './slices.js';
 
 let pass = 0, fail = 0;
@@ -99,7 +100,75 @@ function verify(name, graph) {
   }
   check(`${name}: crossings clear and stay separate`, crossOk, crossDetail);
 
+  // 7. No teleports. Nav nodes merge by coordinate, which is exactly what
+  //    stitches two slices together — but it also means a coordinate collision
+  //    between slices that are NOT neighbours would silently weld two distant
+  //    parts of the world together and let the traveller step across the map.
+  //    Every shared node must be one slice's own, or a socket between two
+  //    orthogonally adjacent cells.
+  const declaredBy = new Map();
+  for (const s of w.slices) {
+    for (const { p } of s.nav.nodes) {
+      const k = navKeyOf(p);
+      if (!declaredBy.has(k)) declaredBy.set(k, []);
+      if (!declaredBy.get(k).includes(s)) declaredBy.get(k).push(s);
+    }
+  }
+  let weld = null;
+  for (const [k, owners] of declaredBy) {
+    if (owners.length === 1) continue;
+    if (owners.length > 2) { weld = `${k} claimed by ${owners.length} slices`; break; }
+    const [a, b] = owners;
+    const touching = a.cells.some((ca) => b.cells.some((cb) =>
+      Math.abs(ca.u - cb.u) + Math.abs(ca.v - cb.v) === 1));
+    if (!touching) { weld = `${a.id} and ${b.id} share ${k} but are not neighbours`; break; }
+  }
+  check(`${name}: no welded-together nav nodes`, !weld, weld || '');
+
+  // 8. The motion itself, not just the destination: constant speed, exact
+  //    endpoints, and no frame that jumps further than the shortest hop — which
+  //    is what "moving cleanly" actually means.
+  if (walk && walk.length > 1) {
+    const pl = plan(walk);
+    const frames = Math.max(1, Math.round(duration(pl.total) / 16.67));
+    let jump = 0, prev = at(pl, 0), regress = 0;
+    for (let f = 1; f <= frames; f++) {
+      const q = at(pl, f / frames);
+      const d = Math.hypot(q.x - prev.x, q.y - prev.y, q.z - prev.z);
+      if (d > jump) jump = d;
+      if (d < -1e-9) regress++;
+      prev = q;
+    }
+    const ends = at(pl, 0), endz = at(pl, 1);
+    check(`${name}: walk starts and ends exactly`,
+      ends.x === walk[0].x && ends.z === walk[0].z
+      && endz.x === walk[walk.length - 1].x && endz.z === walk[walk.length - 1].z);
+
+    // She must never leave the polyline. Passing several nav nodes inside one
+    // frame is fine — cutting a corner through open air is not.
+    let strayed = 0;
+    for (let f = 0; f <= frames; f++) {
+      const q = at(pl, f / frames);
+      let best = Infinity;
+      for (let i = 1; i < walk.length; i++) best = Math.min(best, distToSegment(q, walk[i - 1], walk[i]));
+      if (best > 1e-6) strayed++;
+    }
+    check(`${name}: never leaves the path`, strayed === 0, `${strayed} frames off it`);
+
+    // A comfort bound rather than a correctness one: at 60fps a step this size
+    // is about 36px on screen at full zoom.
+    check(`${name}: no visible jump`, jump <= 1.5, `${jump.toFixed(3)} units in one frame`);
+    check(`${name}: walk never goes backwards`, regress === 0, `${regress} frames`);
+  }
+
   return w;
+}
+
+function distToSegment(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const L = dx * dx + dy * dy + dz * dz;
+  const t = L > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy + (p.z - a.z) * dz) / L)) : 0;
+  return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t), p.z - (a.z + dz * t));
 }
 
 const navKeyOf = (p) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;

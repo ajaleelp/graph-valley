@@ -11,10 +11,15 @@ reusable template slices**, stitched seamlessly?
 whitebox — four flat materials, no lighting, no mist, no art direction.
 
 ```bash
-node poc/check.mjs      # headless verification of every claim below
-node poc/serve.mjs      # viewer at http://localhost:5174
-node poc/render.mjs deep out.svg [--nav]    # render a world to a file
+node poc/check.mjs                              # verify every claim below, headless
+node poc/serve.mjs                              # viewer at http://localhost:5174
+node poc/render.mjs deep out.svg --at p4 --nav  # render a world to a file
 ```
+
+In the viewer: **click any platform to walk there.** You can click a new one
+mid-walk — she re-paths from where she is standing rather than snapping back.
+Drag to pan, scroll to zoom, and the toggles overlay the nav graph and the
+slice kinds.
 
 ---
 
@@ -98,6 +103,14 @@ Over six authored graphs and 200 random DAGs — 1442 assertions:
   concrete walk to the summit exists;
 - **routes climb and never descend** — you never go down to reach something that
   depends on you;
+- **no welded nav nodes** — nav nodes merge by coordinate, which is what stitches
+  slices together, so a collision between slices that are *not* neighbours would
+  silently weld two distant parts of the world and let the traveller step across
+  the map. Every shared node is either one slice's own or a socket between
+  orthogonally adjacent cells;
+- **the motion, not just the destination** — sampled at 60fps, the traveller
+  starts and ends exactly on her endpoints, never leaves the nav polyline (to
+  1e-6), never moves more than 1.5 units in a frame, and never descends;
 - **only the four templates** are ever instantiated;
 - **crossings clear** by at least `HEADROOM` levels and the nav graph keeps
   their two paths unjoined.

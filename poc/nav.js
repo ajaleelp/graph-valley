@@ -74,4 +74,16 @@ export function reachable(nav, from) {
   return seen;
 }
 
+/* The nav node nearest a point. Used when a walk is interrupted part-way: she
+ * re-paths from the node she is standing nearest rather than snapping back to
+ * wherever the last walk started. */
+export function nearestNode(nav, p) {
+  let best = null, bestD = Infinity;
+  for (const [k, q] of nav.pos) {
+    const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2 + ((q.z - p.z) * 2) ** 2;
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+
 export const navKey = key;
