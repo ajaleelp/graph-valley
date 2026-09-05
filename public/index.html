@@ -81,9 +81,11 @@
       </defs>
       <g id="viewport">
         <g id="world-structure"></g>
-        <!-- the traveller: drawn last so she is never lost inside the stone -->
+        <!-- The traveller. Her body is slotted into the painter's order every
+             frame so the world can pass in front of her; her lantern is a
+             separate layer that always draws last, so when she is behind stone
+             you still see a warm glow rather than losing her entirely. -->
         <g id="avatar">
-          <ellipse class="av-lamp" cx="0" cy="-24" rx="26" ry="26" fill="url(#lampGlow)" />
           <ellipse class="av-shadow" cx="0" cy="1" rx="11" ry="5" />
           <g class="av-body">
             <circle class="av-face" cx="0" cy="-32" r="5.6" />
@@ -93,6 +95,9 @@
             <polygon class="av-hat-shade" points="0,-57 10,-38.5 0,-38.5" />
             <rect class="av-brim" x="-11" y="-39.2" width="22" height="2.8" rx="1.4" />
           </g>
+        </g>
+        <g id="avatar-lamp">
+          <ellipse class="av-lamp" cx="0" cy="-24" rx="26" ry="26" fill="url(#lampGlow)" />
         </g>
       </g>
     </svg>

@@ -69,6 +69,7 @@ const dimTri = (tri) => tri.map((c) => dim(c));
 const S = {
   topic: null, title: null, graph: null, source: null,
   done: new Set(), scene: null, edgeMap: new Map(), nodeById: new Map(),
+  groupEls: [], visOrder: [], avIdx: -1,
   lessonCache: new Map(), currentNode: null, at: null, walking: false,
   chapter: CHAPTERS[0], reduced: false,
 };
@@ -115,6 +116,17 @@ const loadSave = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY))
 const statusOf = (n) =>
   S.done.has(n.id) ? 'complete' : n.deps.every((d) => S.done.has(d)) ? 'available' : 'locked';
 
+/* How much of the world is out of the mist yet.
+   Monument Valley never hands you the whole map: you see where you are, a
+   suggestion of what is next, and nothing beyond. The summit is the one
+   exception — it stays a ghost on the horizon, because it is what you are
+   walking toward. */
+function veilOf(n) {
+  if (statusOf(n) !== 'locked') return 'clear';
+  if (n.goal) return 'near';
+  return n.deps.some((d) => statusOf(S.nodeById.get(d)) !== 'locked') ? 'near' : 'far';
+}
+
 /* -------------------------------- palette ------------------------------- */
 
 function applyChapter(topic) {
@@ -140,8 +152,13 @@ function applyChapter(topic) {
 
 function renderWorld() {
   const host = $('#world-structure');
+  const av = $('#avatar');
+  const lamp = $('#avatar-lamp');
+  av.remove();
+  lamp.remove();
   host.textContent = '';
   const frag = document.createDocumentFragment();
+  S.groupEls = [];
 
   for (const g of S.scene.groups) {
     const node = el('g', { class: g.kind === 'node' ? 'grp monument' : 'grp span' });
@@ -156,24 +173,88 @@ function renderWorld() {
         ? el('path', { class: s.cls, d: s.d })
         : el('polygon', { class: s.cls, points: s.pts }));
     }
+    S.groupEls.push(node);
     frag.appendChild(node);
   }
   host.appendChild(frag);
+  host.appendChild(av);
+  host.appendChild(lamp);
+  S.avIdx = -1;
   renderLabels();   // must exist before paintStatus fills in their names
   paintStatus();
 }
 
+/* Draw the unrevealed world BEHIND the revealed one.
+   In this projection later layers sit nearer the camera, so left in their true
+   depth order the mist would fall in front of the monuments you can actually
+   see and turn them milky. Ghosts belong behind; the moment a place is
+   revealed it drops back into its real position. Within each band the exact
+   depth order is preserved. */
+function layerMist() {
+  const host = $('#world-structure');
+  const frag = document.createDocumentFragment();
+  S.visOrder = [];
+  for (const band of ['far', 'near', 'clear']) {
+    S.scene.groups.forEach((g, i) => {
+      if (g.veil !== band) return;
+      frag.appendChild(S.groupEls[i]);
+      if (band === 'clear') S.visOrder.push({ g, el: S.groupEls[i] });
+    });
+  }
+  host.appendChild(frag);
+  host.appendChild($('#avatar'));
+  host.appendChild($('#avatar-lamp'));
+  S.avIdx = -1;
+  sortAvatar();
+}
+
+/* Slot the traveller into the painter's order for wherever she is standing.
+   She used to be drawn last, which is what made her look like she was flying
+   over the world: nothing could ever pass in front of her. Now she is a small
+   box like any other, so the near flank of a monument hides her as she passes
+   behind it and an arch passes over her head. */
+function sortAvatar() {
+  const vis = S.visOrder;
+  if (!vis || !vis.length) return;
+  const p = avatarPos;
+  const x0 = p.x - 0.4, y0 = p.y - 0.4, z0 = p.z;
+  let idx = 0;
+  for (let i = 0; i < vis.length; i++) {
+    const g = vis[i].g;
+    // the piece lies entirely on her far side along some axis, so it is behind
+    if (g.x1 <= x0 + 1e-6 || g.y1 <= y0 + 1e-6 || g.z1 <= z0 + 1e-6) idx = i + 1;
+  }
+  if (idx === S.avIdx) return;
+  S.avIdx = idx;
+  $('#world-structure').insertBefore($('#avatar'), idx < vis.length ? vis[idx].el : null);
+  $('#world-structure').appendChild($('#avatar-lamp'));
+}
+
+const VEIL_RANK = { far: 0, near: 1, clear: 2 };
+
 function paintStatus() {
+  const veil = new Map(S.graph.nodes.map((n) => [n.id, veilOf(n)]));
+  // A path is as visible as the more revealed of the two places it joins, so
+  // you can see the bridge you are about to take leading off into the mist.
+  const legVeil = (a, b) =>
+    VEIL_RANK[veil.get(a)] >= VEIL_RANK[veil.get(b)] ? veil.get(a) : veil.get(b);
+
   for (const g of $$('#world-structure .monument')) {
     const n = S.nodeById.get(g.dataset.node);
     g.setAttribute('data-st', statusOf(n));
+    g.setAttribute('data-veil', veil.get(n.id));
     g.classList.toggle('is-goal', !!n.goal);
   }
   for (const g of $$('#world-structure .span')) {
     const a = S.nodeById.get(g.dataset.from), b = S.nodeById.get(g.dataset.to);
     g.setAttribute('data-st', S.done.has(a.id) && S.done.has(b.id) ? 'complete'
       : S.done.has(a.id) ? 'available' : 'locked');
+    g.setAttribute('data-veil', legVeil(a.id, b.id));
   }
+  for (const g of S.scene.groups) {
+    g.veil = g.nodeId ? veil.get(g.nodeId) : legVeil(g.from, g.to);
+  }
+  layerMist();
   for (const l of $$('#labels .mlabel')) {
     const n = S.nodeById.get(l.dataset.node);
     const st = statusOf(n);
@@ -215,11 +296,9 @@ function positionLabels() {
     const st = statusOf(n);
     const x = n.anchor.x * view.k + view.x;
     const y = n.anchor.y * view.k + view.y + 22 * Math.max(0.6, view.k);
-    // Locked places only announce themselves once they are one step away —
-    // the rest of the world keeps its mystery.
-    const frontier = st !== 'locked' || n.goal || n.deps.some((d) => S.done.has(d));
+    // A place only announces itself once it is out of the mist.
     const on = x > -160 && x < r.width + 160 && y > -60 && y < r.height + 60
-      && frontier && (!sparse || st !== 'locked' || n.goal);
+      && veilOf(n) !== 'far' && (!sparse || st !== 'locked' || n.goal);
     if (!on) { l.style.display = 'none'; continue; }
     l.style.display = '';
     l.style.transform = `translate(${x}px, ${y}px) translate(-50%, 0)`;
@@ -247,10 +326,26 @@ function applyView() {
   positionChoice();
 }
 
+/* The screen bounds of everything currently out of the mist. */
+function visibleBounds() {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const g of S.scene.groups) {
+    if (g.veil === 'far') continue;
+    for (const X of [g.x0, g.x1]) for (const Y of [g.y0, g.y1]) for (const Z of [g.z0, g.z1]) {
+      const p = P(X, Y, Z);
+      if (p.x < x0) x0 = p.x;
+      if (p.x > x1) x1 = p.x;
+      if (p.y < y0) y0 = p.y;
+      if (p.y > y1) y1 = p.y;
+    }
+  }
+  return Number.isFinite(x0) ? { x0, y0, x1, y1 } : S.scene.bounds;
+}
+
 function fitView(animate = false) {
   if (!S.scene) return;
   const r = $('#world').getBoundingClientRect();
-  const b = S.scene.bounds;
+  const b = visibleBounds();
   const pad = r.width < 700 ? 40 : 110;
   const k = clamp(Math.min((r.width - pad * 2) / (b.x1 - b.x0), (r.height - pad * 2 - 60) / (b.y1 - b.y0)), 0.14, 1.1);
   const target = {
@@ -374,8 +469,11 @@ function bindCamera() {
 
 function drawAvatar(pt) {
   const p = P(pt.x, pt.y, pt.z);
-  $('#avatar').setAttribute('transform', `translate(${p.x} ${p.y})`);
+  const t = `translate(${p.x} ${p.y})`;
+  $('#avatar').setAttribute('transform', t);
+  $('#avatar-lamp').setAttribute('transform', t);
   avatarPos = pt;
+  sortAvatar();
 }
 
 function placeAvatar(node) {
@@ -413,7 +511,7 @@ function findPath(fromId, toId) {
 /* The real causeway geometry for a hop sequence — the avatar walks the stone
    that is actually drawn, staircases included. */
 function routePoints(path) {
-  const out = [avatarPos];
+  const out = [];
   for (let i = 0; i < path.length - 1; i++) {
     const a = path[i], b = path[i + 1];
     const fwd = S.edgeMap.get(edgeKey(a, b));
@@ -422,7 +520,14 @@ function routePoints(path) {
     else if (rev) out.push(...[...rev.walk].reverse());
     out.push(S.nodeById.get(b).stand);
   }
-  return out;
+  // She may already be part-way along this route — waiting at a junction, say.
+  // Rejoin it where she stands instead of walking back to the start first.
+  let at = -1, best = 0.9;
+  for (let i = 0; i < out.length; i++) {
+    const d = Math.hypot(out[i].x - avatarPos.x, out[i].y - avatarPos.y, out[i].z - avatarPos.z);
+    if (d < best) { best = d; at = i; }
+  }
+  return [avatarPos, ...out.slice(at + 1)];
 }
 
 /* Consecutive waypoints must differ on at most one horizontal axis: the
@@ -436,17 +541,23 @@ function assertOnStone(pts) {
 }
 
 let walkRaf = null;
-function walkTo(node, done) {
-  if (S.walking) return;
-  if (!S.at || S.at === node.id) { placeAvatar(node); done && done(); return; }
-  if (S.reduced) { placeAvatar(node); focusOn(node.stand, null, false); done && done(); return; }
 
-  const pts = routePoints(findPath(S.at, node.id));
+/* Walk a polyline of grid points, at an even pace, with the camera following. */
+function animateWalk(pts, done) {
+  if (S.walking) return;
   if (!assertOnStone(pts)) {
-    // No continuous walkway to this monument. Better to step there than to
-    // glide across open sky, which is the one thing that reads as broken.
-    placeAvatar(node);
-    focusOn(node.stand, null, false);
+    // No continuous walkway. Better to step there than to glide across open
+    // sky, which is the one thing that reads as broken.
+    const end = pts[pts.length - 1];
+    drawAvatar(end);
+    focusOn(end, null, false);
+    done && done();
+    return;
+  }
+  if (S.reduced) {
+    const end = pts[pts.length - 1];
+    drawAvatar(end);
+    focusOn(end, null, false);
     done && done();
     return;
   }
@@ -459,7 +570,11 @@ function walkTo(node, done) {
     seg.push(d);
     total += d;
   }
-  if (total < 1) { placeAvatar(node); done && done(); return; }
+  if (total < 1) {
+    drawAvatar(pts[pts.length - 1]);
+    done && done();
+    return;
+  }
 
   const dur = clamp((total / 300) * 1000, 550, 5200);
   const av = $('#avatar');
@@ -476,8 +591,9 @@ function walkTo(node, done) {
     clearTimeout(walkGuard);
     S.walking = false;
     av.classList.remove('walking');
-    placeAvatar(node);
-    focusOn(node.stand, null, false);
+    const end = pts[pts.length - 1];
+    drawAvatar(end);
+    focusOn(end, null, false);
     done && done();
   };
   const walkGuard = setTimeout(arrive, dur + 600);
@@ -494,6 +610,23 @@ function walkTo(node, done) {
     arrive();
   };
   walkRaf = requestAnimationFrame(step);
+}
+
+function walkTo(node, done) {
+  if (S.walking) return;
+  if (!S.at || S.at === node.id) { placeAvatar(node); done && done(); return; }
+  animateWalk(routePoints(findPath(S.at, node.id)), () => {
+    placeAvatar(node);
+    done && done();
+  });
+}
+
+/* Walk out to where the onward paths actually diverge, and stop there. She is
+   still "at" the monument she came from; routePoints rejoins whichever route
+   she is sent on next from wherever she is standing. */
+function walkToJunction(n, done) {
+  if (!n.junctionWalk || S.walking) { done && done(); return; }
+  animateWalk([avatarPos, ...n.junctionWalk], done);
 }
 
 /* -------------------------------- lessons ------------------------------- */
@@ -605,7 +738,10 @@ function closeSheet() {
   const n = S.currentNode;
   if (!n || n.goal) return;
   const opts = S.graph.nodes.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
-  if (opts.length >= 2) showChoice(opts);
+  if (opts.length < 2) return;
+  // Walk out to the fork first and ask there. Being asked which way to go
+  // while still standing in the doorway is not a choice you can see.
+  walkToJunction(n, () => showChoice(opts));
 }
 
 /* -------------------------- fork-in-the-road prompt ---------------------- */
@@ -748,7 +884,7 @@ function enterWorld() {
   // distance — close enough that the traveller reads as a figure, but far
   // enough on a phone that you can still see where the path goes
   const r = $('#world').getBoundingClientRect();
-  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.38 : 0.62), 950);
+  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.55 : 0.62), 950);
 }
 
 function updateHud() {

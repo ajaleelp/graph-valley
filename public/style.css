@@ -236,6 +236,13 @@ button { font: inherit; color: inherit; }
 /* Causeways are solid stone in every state. Translucency would break the one
    thing the whole look depends on: that these are real, heavy objects. */
 
+/* The mist. The world is not handed over all at once — it surfaces as you
+   walk into it, and closes again beyond the next monument. */
+.grp { transition: opacity 1.1s ease; }
+.grp[data-veil="near"] { opacity: 0.34; }
+.grp[data-veil="far"] { opacity: 0; pointer-events: none; }
+#avatar { pointer-events: none; }
+
 .monument { cursor: pointer; outline: none; }
 .monument[data-st="locked"] { cursor: not-allowed; }
 .monument:focus-visible { filter: drop-shadow(0 0 0 3px #fff); }
@@ -267,7 +274,8 @@ button { font: inherit; color: inherit; }
 .av-hat-shade { fill: #ddd1ba; }
 .av-brim { fill: #3c3446; }
 .av-shadow { fill: rgba(70, 50, 60, 0.22); }
-.av-lamp { opacity: 0.7; }
+.av-lamp { opacity: 0.62; }
+#avatar-lamp { pointer-events: none; }
 #avatar .av-body { transform-box: fill-box; transform-origin: 50% 100%; }
 #avatar.walking .av-body { animation: stride 0.42s ease-in-out infinite alternate; }
 @keyframes stride { from { transform: translateY(0) rotate(-1.2deg); } to { transform: translateY(-3px) rotate(1.2deg); } }

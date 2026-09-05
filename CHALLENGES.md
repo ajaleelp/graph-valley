@@ -121,14 +121,54 @@ arriving one. Two further things cut the count again:
 - **landings at every turn**, so a route reads as designed architecture rather
   than planks meeting in mid-air.
 
+**3a. The traveller has to be part of the painter's order.** She was drawn last,
+so nothing could ever pass in front of her and she read as flying over the
+world rather than moving through it. Fixing it needed the monuments split: a
+monument was one group whose bounding box contained her, and no axis could
+separate them. Each is now five pieces — the mass below the deck, the far
+flank, the lane, the near flank, and whatever spans the lane overhead — whose
+boxes *are* separable, so the near flank draws over her as she passes behind it
+and an arch passes over her head. Her lantern is a separate layer that always
+draws last, so when stone hides her you still see a glow rather than losing her.
+
+That fix has a design consequence worth knowing: in this projection a mass on
+the near flank projects up to five and a half cells to the LEFT of where it
+stands, so anything tall beside the lane blots out the lane next to it. Two
+rules follow. Archetypes keep their tall mass on the FAR flank and the near
+flank low. And she waits at the top of each monument's ramp, at its outward
+edge — the one spot inside a monument that nothing can ever stand in front of,
+and where you would wait anyway if you were about to leave.
+
 **3. Part of every layer's climb has to happen inside the monument.** This was
 the subtle one. A monument's own footprint contributes eleven cells of run and
 no rise, which flattens everything: at `RISE = 18` the spine climbed 64px per
 layer against 1024px of travel — a 16:1 strip, whatever the buildings looked
 like. Splitting the budget between a stepped ramp through the monument's lane
 and the staircase in the corridor gives two gentle flights instead of one steep
-one, lets `RISE` go half as high again, and takes the world to roughly 1.5:1.
-Walking up through a building is the Monument Valley move anyway.
+one and lets the rise go half as high again. Walking up through a building is
+the Monument Valley move anyway.
+
+**4. A world that only grows left to right is a spacing problem as much as a
+direction one.** Identical gaps and identical climbs turn a sequence of
+monuments into beads on a string, so every corridor now has its own span, rise
+and sideways step. Direction needed geometry, though. Screen height falls by
+16px for every cell of travel in *either* horizontal axis and only rises by 32px
+per level, so a corridor only carries the world leftward when it travels further
+across the grain (+y) than along it (+x) — and it only climbs at the same time
+if its rise is derived from that total travel rather than fixed per layer. So
+layers step sideways by alternating amounts, and a single hop with a long
+sideways run climbs on a staircase turned ninety degrees, over a deliberately
+short span. Chains now come out near 0.6:1 with the spine reversing direction
+about half the time, instead of 2.3:1 heading one way.
+
+**5. The world arrives out of the mist.** Nothing beyond the next monument is
+drawn at all; the next one is a ghost; the summit stays a ghost on the horizon
+because it is what you are walking toward. One wrinkle: later layers sit *nearer*
+the camera in this projection, so left in their true depth order the mist falls
+in front of the monuments you can see and turns them milky. Unrevealed pieces
+are therefore drawn behind everything, in their own band, and drop back into
+their real position the moment they are revealed. `Fit` frames only what is out
+of the mist.
 
 ### Reading at a distance
 
@@ -157,9 +197,9 @@ neighbouring monuments run together into one pale plane.
 - **The spine is linear.** Layers march along one axis. A switchback layout
   would be more compact, but it complicates the corridor model, which assumes
   one advance axis.
-- **Long journeys still stretch.** A sixteen-layer chain reaches about 2.6:1;
-  the composition is only compact for the four-to-six layer graphs the
-  generator usually produces.
+- **Wide graphs still stretch.** Layers with several siblings fall back to a
+  flat shared viaduct and cannot switch back, so a heavily branching graph
+  reaches about 1.5:1 while a chain reaches 0.6:1.
 - **Contact shadows are placed by hand** per archetype rather than derived, so a
   new archetype has to remember to cast one.
 

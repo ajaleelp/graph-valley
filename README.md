@@ -42,7 +42,18 @@ The learning graph (prerequisites → concepts → goal) is the world itself.
   signature Monument Valley move and the thing that makes the world climb
   instead of sprawling sideways.
 - **The traveller really walks it** — she follows the stone that is actually
-  drawn, staircases and ramps included, and the camera tracks her.
+  drawn, staircases and ramps included, and the camera tracks her. She is part
+  of the painter's order too, so the near side of a monument hides her as she
+  passes behind it and an arch passes over her head; her lantern always draws
+  last, so stone never simply loses her.
+- **A world that arrives out of the mist** — nothing past the next monument is
+  drawn, the next one is a ghost, and the summit stays a ghost on the horizon.
+  It surfaces as you walk into it.
+- **A switchback, not a march** — every corridor has its own span, rise and
+  sideways step, and a hop with a long sideways run climbs on a staircase
+  turned ninety degrees, sending that stretch of the world back the other way.
+- **Forks are asked at the fork** — finish a lesson where the path divides and
+  she walks out to the junction before asking which way.
 - **6 chapter palettes** (sandstone, rose, lagoon, lilac, verdigris, ember),
   chosen deterministically from your topic, each with its own sky.
 - **Fork-in-the-road guidance** — when 2+ paths are open, a Monument Valley–style
