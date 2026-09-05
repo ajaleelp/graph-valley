@@ -1,42 +1,83 @@
-/* Graph Valley — front-end: world rendering, traversal, lessons. */
-'use strict';
+/* Graph Valley — front end: world rendering, traversal, lessons. */
+
+import { P } from './iso.js';
+import { layout, buildScene, hash } from './world.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const SVGNS = 'http://www.w3.org/2000/svg';
-const XHTMLNS = 'http://www.w3.org/1999/xhtml';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const SAVE_KEY = 'graphvalley.save.v2';
 
-/* Per-castle accent palettes — varied like the reference (coral, pink, teal,
-   gold, sky), all with cream tops. Complete turns gold. */
-const PALETTES = [
-  { top: '#f8ecd8', left: '#f2a583', right: '#e58a66' }, // coral
-  { top: '#fcefe0', left: '#f3b8a0', right: '#ef9c86' }, // blush
-  { top: '#f6eeda', left: '#e0a06a', right: '#cd8350' }, // terracotta
-  { top: '#fbf0dd', left: '#f0ad8e', right: '#e48f70' }, // peach
+/* Chapter palettes. Each is one coherent Monument Valley scene: a stone with
+   three flat tones (lid / left / right), a lighter trim for decks and stairs,
+   one saturated accent, and a sky the stone sits against. Light falls from the
+   left, so the +y face is always lighter than the +x face. */
+const CHAPTERS = [
+  { name: 'sandstone',
+    s: ['#f6dcc0', '#e0a87a', '#c07e51'], t: ['#fce9d4', '#e9b78d', '#cd8d62'],
+    a: ['#3fa396', '#348a7f', '#2a7268'], n: ['#a96b48', '#97583a', '#82492f'],
+    sky: ['#ffebd2', '#fbc9b0', '#e0a4b6'], sun: '#fff3d6' },
+  { name: 'rose',
+    s: ['#f8dad6', '#e5a19c', '#c77a76'], t: ['#fde8e5', '#eeb1ac', '#d38b87'],
+    a: ['#eeb13b', '#d89a2c', '#bc8020'], n: ['#b06d6a', '#9c5b58', '#874c49'],
+    sky: ['#ffe6e4', '#f5c4ce', '#c4a8d6'], sun: '#fff2e8' },
+  { name: 'lagoon',
+    s: ['#d6e6ea', '#8fb4c0', '#628b9b'], t: ['#e4f0f3', '#a3c4ce', '#7599a8'],
+    a: ['#f0855c', '#da6e46', '#bc5836'], n: ['#527787', '#456573', '#3a5663'],
+    sky: ['#e4f2f5', '#bedce4', '#a6b7dc'], sun: '#f9ffff' },
+  { name: 'lilac',
+    s: ['#eadff4', '#bca2d6', '#9a7dbb'], t: ['#f4ebfa', '#cbb4e2', '#a98cc8'],
+    a: ['#6fbf9a', '#58a783', '#468c6c'], n: ['#8467a5', '#745793', '#63497e'],
+    sky: ['#f2e6fb', '#d9c3ee', '#b3aae3'], sun: '#fff4fd' },
+  { name: 'verdigris',
+    s: ['#dfeee0', '#a2c6a9', '#7ca487'], t: ['#ecf6ed', '#b3d3b9', '#8db296'],
+    a: ['#e37a52', '#cc653f', '#ae5031'], n: ['#6e9377', '#608266', '#517058'],
+    sky: ['#e7f5e9', '#c9e3d3', '#a9c2dc'], sun: '#faffef' },
+  { name: 'ember',
+    s: ['#fbdece', '#ec9f7c', '#d07a57'], t: ['#ffeade', '#f2b291', '#dc8c68'],
+    a: ['#4e85b6', '#3f6f9c', '#325a80'], n: ['#b06344', '#9c5236', '#86452c'],
+    sky: ['#ffe6d0', '#f9bca8', '#cb9fc1'], sun: '#fff5da' },
 ];
-const GOLD = { top: '#fbe7c0', left: '#f2c94c', right: '#e0a83b' };
-const SAVE_KEY = 'graphvalley.save.v1';
-
-const S = {
-  topic: null,
-  title: null,
-  graph: null,
-  source: null,
-  done: new Set(),
-  nodeEls: new Map(),
-  avatar: { x: 0, y: 0 },
-  anim: null,
-  lessonCache: new Map(),
-  currentNode: null,
-  at: null, // id of the node the avatar is standing at
-  walking: false,
+/* Completed monuments turn to gold; locked ones sit in unlit stone. */
+const GOLD = {
+  s: ['#fbecca', '#e9c67d', '#cda256'], t: ['#fef6df', '#f2d9a4', '#dcbb74'],
+  a: ['#fdf0d3', '#e8ce92', '#cfae69'], n: ['#c6a161', '#b28f52', '#9b7c46'],
 };
 
-const view = { x: 0, y: 0, k: 1 };
-let didDrag = false;
+/* Locked stone is NOT greyed out — Monument Valley never drains its world of
+   colour, and the whole structure should be worth looking at from the first
+   second. Locked monuments just recede: a touch of atmosphere mixed in, the
+   way distance works. State is carried by the glow and the label instead. */
+function hexToHsl(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  const r = ((v >> 16) & 255) / 255, g = ((v >> 8) & 255) / 255, b = (v & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn;
+  const sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  const h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, sat, l];
+}
+const dim = (hex, satMul = 0.88, lightMix = 0.1) => {
+  const [h, s, l] = hexToHsl(hex);
+  return `hsl(${(h * 360).toFixed(1)} ${(s * satMul * 100).toFixed(1)}% ${((l + (0.9 - l) * lightMix) * 100).toFixed(1)}%)`;
+};
+const dimTri = (tri) => tri.map((c) => dim(c));
 
-/* ------------------------------ helpers ------------------------------ */
+const S = {
+  topic: null, title: null, graph: null, source: null,
+  done: new Set(), scene: null, edgeMap: new Map(), nodeById: new Map(),
+  lessonCache: new Map(), currentNode: null, at: null, walking: false,
+  chapter: CHAPTERS[0], reduced: false,
+};
+
+const view = { x: 0, y: 0, k: 0.6 };
+let didDrag = false;
+let avatarPos = { x: 0, y: 0, z: 0 };
+
+/* ------------------------------- helpers ------------------------------- */
 
 function el(tag, attrs = {}) {
   const n = document.createElementNS(SVGNS, tag);
@@ -44,22 +85,8 @@ function el(tag, attrs = {}) {
   return n;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
-  );
-}
-
-/* deterministic PRNG so the starfield is stable per render */
-function mulberry32(seed) {
-  return function () {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 let toastTimer = null;
 function toast(msg, ms = 2600) {
@@ -70,375 +97,235 @@ function toast(msg, ms = 2600) {
   toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
-function showScreen(id) {
-  $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
-}
+const showScreen = (id) => $$('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
 
 function saveGame() {
   try {
-    localStorage.setItem(
-      SAVE_KEY,
-      JSON.stringify({ topic: S.topic, title: S.title, graph: S.graph, source: S.source, done: [...S.done] }),
-    );
-  } catch { /* private mode etc. */ }
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      topic: S.topic, title: S.title, source: S.source, done: [...S.done],
+      graph: {
+        title: S.graph.title,
+        nodes: S.graph.nodes.map((n) => ({ id: n.id, title: n.title, summary: n.summary, deps: n.deps, goal: n.goal })),
+      },
+    }));
+  } catch { /* private mode */ }
 }
-
-function loadSave() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVE_KEY));
-  } catch {
-    return null;
-  }
-}
-
-/* ------------------------------- layout ------------------------------ */
-
-/* Compact connected layout: ONE dense structure. depth = a tight ring
-   outward; nodes cluster so towers nearly touch, with real verticality. */
-function computeLayout(graph) {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const rand = mulberry32(20240);
-  const cache = new Map();
-  const depth = (id) => {
-    if (cache.has(id)) return cache.get(id);
-    const n = byId.get(id);
-    const d = n.deps.length ? 1 + Math.max(...n.deps.map(depth)) : 0;
-    cache.set(id, d);
-    return d;
-  };
-  const layers = new Map();
-  for (const n of graph.nodes) {
-    const L = depth(n.id);
-    if (!layers.has(L)) layers.set(L, []);
-    layers.get(L).push(n);
-    n.depth = L;
-  }
-  for (const [L, arr] of layers) {
-    if (L === 0) { arr.forEach((n) => { n.sx = 0; n.sy = 0; }); continue; }
-    arr.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-    const baseAngle = rand() * Math.PI * 2;
-    arr.forEach((n, i) => {
-      const ang = baseAngle + (i * 2 * Math.PI) / arr.length + (rand() - 0.5) * 0.5;
-      const r = L * 28 + (rand() - 0.5) * 8; // super dense – one single monument
-      n.sx = Math.cos(ang) * r;
-      n.sy = Math.sin(ang) * r * 0.5;
-      n.elev = Math.max(...n.deps.map((d) => byId.get(d).elev ?? 0), 0) + (rand() < 0.55 ? 0 : 22);
-    });
-  }
-  graph.nodes.forEach((n, i) => (n._pal = i % PALETTES.length));
-}
+const loadSave = () => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } };
 
 const statusOf = (n) =>
   S.done.has(n.id) ? 'complete' : n.deps.every((d) => S.done.has(d)) ? 'available' : 'locked';
 
-/* --------------------------- world rendering -------------------------- */
+/* -------------------------------- palette ------------------------------- */
 
-/* -------------------- Monument Valley building blocks --------------------
-   Isometric helper: for an object of half-width w sitting with its front
-   corner at (0,y0) rising to height h, the visible faces are three quads. */
-
-function polyPts(...pts) {
-  return pts.map((p) => p.join(',')).join(' ');
-}
-
-/* ---- isometric block: a solid box of half-width w, top at (x, topY) ----
-   The "top" diamond has its front corner at (x, topY + w*0.5). */
-function addBlock(g, x, topY, w, h) {
-  const ry = w * 0.5;
-  const f = topY + ry; // front corner of the top face
-  g.appendChild(el('polygon', { class: 'f-left', points: polyPts([x - w, topY], [x, f], [x, f + h], [x - w, topY + h]) }));
-  g.appendChild(el('polygon', { class: 'f-right', points: polyPts([x + w, topY], [x, f], [x, f + h], [x + w, topY + h]) }));
-  g.appendChild(el('polygon', { class: 'f-top', points: polyPts([x, topY - ry], [x + w, topY], [x, f], [x - w, topY]) }));
-  return topY;
-}
-
-/* hanging pillar below a block (Monument Valley's floating columns) */
-function addPillar(g, x, topY, w, drop) {
-  const ry = w * 0.5;
-  g.appendChild(el('polygon', { class: 'f-left', points: polyPts([x - w, topY], [x, topY + ry], [x, topY + ry + drop], [x - w, topY + drop]) }));
-  g.appendChild(el('polygon', { class: 'f-right', points: polyPts([x + w, topY], [x, topY + ry], [x, topY + ry + drop], [x + w, topY + drop]) }));
-}
-
-function addDome(g, x, topY) {
-  g.appendChild(el('path', { class: 'f-dome', d: `M ${x - 13} ${topY} A 13 13 0 0 1 ${x + 13} ${topY} Z` }));
-  g.appendChild(el('line', { class: 'roofline', x1: x, y1: topY - 13, x2: x, y2: topY - 20 }));
-  g.appendChild(el('circle', { class: 'roof', cx: x, cy: topY - 22, r: 2.4 }));
-}
-
-/* arched doorway on the front face of a block */
-function addArch(g, x, baseY, s = 1) {
-  g.appendChild(el('path', {
-    class: 'f-arch',
-    d: `M ${x - 5 * s} ${baseY} L ${x - 5 * s} ${baseY - 9 * s} A ${5 * s} ${5 * s} 0 0 1 ${x + 5 * s} ${baseY - 9 * s} L ${x + 5 * s} ${baseY} Z`,
-  }));
-}
-
-/* The walkable point on top of a node (world coords): front corner of its roof. */
-const nodeTop = (n) => ({ x: n.sx, y: n.sy + n.w * 0.5 - (n.elev || 0) });
-
-const buildingH = (n, i) => (n.goal ? 96 : 58 + (i % 3) * 14);
-/* the front-bottom corner y of a node's base (local coords) — where its label sits */
-const baseBottom = (n, i) => -(n.elev || 0) + buildingH(n, i) + n.w * 0.5;
-
-/* A floating castle: towers with dark pointed roofs + pennants on a solid
-   base that tapers downward. All coordinates are explicit so roofs sit flush. */
-function buildNodeBuilding(n, i) {
-  const g = el('g', { class: 'bldg' });
-  const w = n.w;
-  const topY = -(n.elev || 0); // the walkable roof plane (front corner at topY + w*0.5)
-  const H = buildingH(n, i);
-  const variant = n.goal ? 'temple' : n.depth === 0 ? 'gate' : ['twin', 'keep', 'tall', 'court'][i % 4];
-
-  // A tower standing on the base roof: draw a block of half-width tw whose
-  // sides rise `th` ABOVE the base roof plane, then cap it with a roof.
-  const tower = (x, tw, th, roof, flag = true) => {
-    const ry = tw * 0.5;
-    const topY2 = topY - th; // the tower's own roof plane
-    addBlock(g, x, topY2, tw, th); // sides hang down `th` from topY2, back to base roof
-    const topNorth = topY2; // top face north corner
-    if (roof === 'cone') {
-      g.appendChild(el('polygon', { class: 'roof', points: polyPts([x, topNorth - tw * 1.4], [x + tw, topNorth + ry], [x - tw, topNorth + ry]) }));
-    } else if (roof === 'dome') {
-      g.appendChild(el('path', { class: 'f-dome', d: `M ${x - tw * 0.8} ${topNorth + ry} A ${tw * 0.8} ${tw * 0.8} 0 0 1 ${x + tw * 0.8} ${topNorth + ry} Z` }));
-    }
-    if (flag) addFlag(g, x + tw * 0.4, topNorth - (roof === 'cone' ? tw * 1.4 : 0));
+function applyChapter(topic) {
+  S.chapter = CHAPTERS[hash(topic || 'graph valley') % CHAPTERS.length];
+  const c = S.chapter;
+  const root = $('#screen-world');
+  const set = (prefix, tri) => {
+    root.style.setProperty(`--${prefix}-t`, tri[0]);
+    root.style.setProperty(`--${prefix}-l`, tri[1]);
+    root.style.setProperty(`--${prefix}-r`, tri[2]);
   };
-
-  // ---- solid base under the whole castle (tapers down) ----
-  // main base block: top face at topY, walls drop H
-  addBlock(g, 0, topY, w, H);
-  // a lower tapering tier
-  addBlock(g, 0, topY + H, w * 0.66, H * 0.5);
-
-  // ---- towers on top, per variant ----
-  if (variant === 'temple') {
-    tower(0, w * 0.5, H * 0.95, 'dome', false);
-    tower(-w * 0.62, w * 0.3, H * 0.66, 'cone');
-    tower(w * 0.62, w * 0.3, H * 0.66, 'cone');
-  } else if (variant === 'gate') {
-    tower(-w * 0.5, w * 0.36, H * 0.7, 'cone');
-    tower(w * 0.5, w * 0.36, H * 0.7, 'cone');
-  } else if (variant === 'twin') {
-    tower(-w * 0.5, w * 0.4, H * 0.78, 'cone');
-    tower(w * 0.5, w * 0.4, H * 0.95, 'cone');
-  } else if (variant === 'keep') {
-    tower(0, w * 0.54, H * 0.85, 'dome', false);
-    tower(-w * 0.66, w * 0.28, H * 0.55, 'cone');
-    tower(w * 0.66, w * 0.28, H * 0.62, 'cone');
-  } else if (variant === 'tall') {
-    tower(0, w * 0.42, H * 1.1, 'cone');
-    tower(-w * 0.6, w * 0.3, H * 0.66, 'cone');
-    tower(w * 0.6, w * 0.3, H * 0.52, 'dome');
-  } else { // court
-    tower(-w * 0.55, w * 0.32, H * 0.66, 'cone');
-    tower(w * 0.55, w * 0.32, H * 0.66, 'cone');
-    tower(0, w * 0.4, H * 0.42, 'dome', false);
-  }
-
-  // arched doorway on the front of the main base
-  addArch(g, 0, topY + w * 0.5 + H * 0.32, n.goal ? 1.7 : 1.2);
-  return g;
+  set('s', c.s); set('t', c.t); set('a', c.a); set('n', c.n);
+  set('gs', GOLD.s); set('gt', GOLD.t); set('ga', GOLD.a); set('gn', GOLD.n);
+  set('ls', dimTri(c.s)); set('lt', dimTri(c.t)); set('la', dimTri(c.a)); set('ln', dimTri(c.n));
+  root.style.setProperty('--sky-1', c.sky[0]);
+  root.style.setProperty('--sky-2', c.sky[1]);
+  root.style.setProperty('--sky-3', c.sky[2]);
+  root.style.setProperty('--sun', c.sun);
+  root.style.setProperty('--accent', c.a[1]);
 }
 
-/* little pennant flag on a pole */
-function addFlag(g, x, y) {
-  g.appendChild(el('line', { class: 'flagpole', x1: x, y1: y, x2: x, y2: y - 13 }));
-  g.appendChild(el('polygon', { class: 'flag', points: polyPts([x, y - 13], [x + 11, y - 10], [x, y - 7]) }));
-}
+/* ----------------------------- world rendering --------------------------- */
 
-/* a THICK bridge / staircase connecting two towers — a solid slab with side
-   walls, like the reference's heavy arches and causeways. */
-function addConnector(g, a, b) {
-  const A = nodeTop(a), B = nodeTop(b);
-  const w = 20; // wide
-  const dx = B.x - A.x, dy = B.y - A.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / len) * w, ny = (dx / len) * w * 0.5;
-  // roof of the causeway
-  g.appendChild(el('polygon', {
-    class: 'walk-top',
-    points: polyPts([A.x + nx, A.y + ny], [B.x + nx, B.y + ny], [B.x - nx, B.y - ny], [A.x - nx, A.y - ny]),
-  }));
-  // stair treads across the top
-  const steps = Math.max(3, Math.floor(len / 16));
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const cx = A.x + dx * t, cy = A.y + dy * t;
-    g.appendChild(el('line', { class: 'tread', x1: cx + nx, y1: cy + ny, x2: cx - nx, y2: cy - ny }));
-  }
-  // solid side walls — deep, so it reads as a heavy structure, not a line
-  const drop = 46;
-  g.appendChild(el('polygon', {
-    class: 'f-right',
-    points: polyPts([A.x + nx, A.y + ny], [B.x + nx, B.y + ny], [B.x + nx, B.y + ny + drop], [A.x + nx, A.y + ny + drop]),
-  }));
-  g.appendChild(el('polygon', {
-    class: 'f-left',
-    points: polyPts([A.x - nx, A.y - ny], [B.x - nx, B.y - ny], [B.x - nx, B.y - ny + drop], [A.x - nx, A.y - ny + drop]),
-  }));
-  return g;
-}
+function renderWorld() {
+  const host = $('#world-structure');
+  host.textContent = '';
+  const frag = document.createDocumentFragment();
 
-/* The whole continuous world: buildings joined by stair-bridges, hanging
-   from slender pillars — one structure, not scattered islands. */
-function renderWorldStructure() {
-  const world = $('#world-structure');
-  world.innerHTML = '';
-  const rand = mulberry32(777);
-  S.nodeEls.clear();
-
-  for (const n of S.graph.nodes) n.w = n.goal ? 130 : n.depth === 0 ? 110 : 95;
-
-  const byId = new Map(S.graph.nodes.map((n) => [n.id, n]));
-  const order = [...S.graph.nodes].sort((a, b) => a.sy + (a.elev || 0) - (b.sy + (b.elev || 0)));
-
-  // connectors first (buildings sit on top of their ends)
-  for (const n of S.graph.nodes) {
-    for (const d of n.deps) {
-      const a = byId.get(d);
-      if (!a) continue;
-      const conn = el('g', { class: 'conn locked', 'data-a': a.id, 'data-b': n.id });
-      addConnector(conn, a, n);
-      world.appendChild(conn);
+  for (const g of S.scene.groups) {
+    const node = el('g', { class: g.kind === 'node' ? 'grp monument' : 'grp span' });
+    if (g.nodeId) {
+      node.setAttribute('data-node', g.nodeId);
+      node.setAttribute('tabindex', '0');
+      node.setAttribute('role', 'button');
     }
-  }
-
-  // each building, hanging from pillar(s)
-  for (const n of order) {
-    const i = S.graph.nodes.indexOf(n);
-    const st = statusOf(n);
-    const pal = st === 'complete' ? GOLD : PALETTES[n._pal];
-    const g = el('g', {
-      class: `node ${st}`,
-      'data-id': n.id,
-      transform: `translate(${n.sx} ${n.sy})`,
-      role: 'button', tabindex: '0',
-    });
-    g.style.setProperty('--top', pal.top);
-    g.style.setProperty('--left', pal.left);
-    g.style.setProperty('--right', pal.right);
-
-    // slender pillar(s) dropping from the building's underside into the void
-    const baseY = -(n.elev || 0) + buildingH(n, i);
-    addPillar(g, -n.w * 0.3, baseY, 5, 60 + rand() * 40);
-    if (n.w > 38) addPillar(g, n.w * 0.3, baseY, 5, 90 + rand() * 30);
-
-    g.appendChild(buildNodeBuilding(n, i));
-
-    // glow ring for available / beacon for the goal
-    g.appendChild(el('ellipse', { class: 'ring', cx: 0, cy: -(n.elev || 0) + n.w * 0.5, rx: n.w + 12, ry: (n.w + 12) * 0.5 }));
-    if (n.goal) g.appendChild(el('ellipse', { class: 'beacon', cx: 0, cy: -(n.elev || 0) + n.w * 0.5, rx: n.w + 30, ry: (n.w + 30) * 0.5 }));
-
-    // Only show a label for reachable/complete nodes. No floating "???" pills.
-    if (st !== 'locked') {
-      const labelY = baseBottom(n, i) + 8;
-      const fo = el('foreignObject', { x: -85, y: labelY, width: 170, height: 30, class: 'label-fo' });
-      const wrap = document.createElementNS(XHTMLNS, 'div');
-      wrap.setAttribute('class', 'node-label-wrap');
-      const label = document.createElementNS(XHTMLNS, 'div');
-      label.setAttribute('class', 'node-label');
-      label.textContent = n.title;
-      wrap.appendChild(label);
-      fo.appendChild(wrap);
-      g.appendChild(fo);
+    if (g.from) { node.setAttribute('data-from', g.from); node.setAttribute('data-to', g.to); }
+    for (const s of g.shapes) {
+      node.appendChild(s.tag === 'path'
+        ? el('path', { class: s.cls, d: s.d })
+        : el('polygon', { class: s.cls, points: s.pts }));
     }
-
-    g.addEventListener('click', () => { if (didDrag) { didDrag = false; return; } onNodeClick(n.id); });
-    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNodeClick(n.id); } });
-    world.appendChild(g);
-    S.nodeEls.set(n.id, g);
+    frag.appendChild(node);
   }
-  paintAll();
+  host.appendChild(frag);
+  renderLabels();   // must exist before paintStatus fills in their names
+  paintStatus();
 }
 
-function paintAll() {
-  const byId = new Map(S.graph.nodes.map((n) => [n.id, n]));
-  for (const n of S.graph.nodes) {
-    const g = S.nodeEls.get(n.id);
-    if (!g) continue;
+function paintStatus() {
+  for (const g of $$('#world-structure .monument')) {
+    const n = S.nodeById.get(g.dataset.node);
+    g.setAttribute('data-st', statusOf(n));
+    g.classList.toggle('is-goal', !!n.goal);
+  }
+  for (const g of $$('#world-structure .span')) {
+    const a = S.nodeById.get(g.dataset.from), b = S.nodeById.get(g.dataset.to);
+    g.setAttribute('data-st', S.done.has(a.id) && S.done.has(b.id) ? 'complete'
+      : S.done.has(a.id) ? 'available' : 'locked');
+  }
+  for (const l of $$('#labels .mlabel')) {
+    const n = S.nodeById.get(l.dataset.node);
     const st = statusOf(n);
-    const pal = st === 'complete' ? GOLD : PALETTES[n._pal];
-    g.style.setProperty('--top', pal.top);
-    g.style.setProperty('--left', pal.left);
-    g.style.setProperty('--right', pal.right);
-    g.setAttribute('class', `node ${st}`);
-    const label = g.querySelector('.node-label');
-    if (label) label.textContent = st === 'locked' ? '???' : n.title;
+    l.dataset.st = st;
+    l.querySelector('.mlabel-text').textContent = st === 'locked' && !n.goal ? 'Undiscovered' : n.title;
   }
-  // walkway states: lit once its source is done, golden once both ends are
-  $('#world-structure').querySelectorAll('.conn').forEach((c) => {
-    const a = byId.get(c.dataset.a), b = byId.get(c.dataset.b);
-    if (!a || !b) return;
-    const st = S.done.has(a.id) && S.done.has(b.id) ? 'done' : S.done.has(a.id) ? 'open' : 'locked';
-    c.setAttribute('class', `conn ${st}`);
-  });
+  positionLabels();
 }
 
-function buildDefs(svg) {
-  const d = el('defs');
-  d.innerHTML = `
-    <radialGradient id="avatarGlow">
-      <stop offset="0" stop-color="#ffdf9e" stop-opacity="0.9"/>
-      <stop offset="0.5" stop-color="#ffc46a" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#ffc46a" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="goalGlow">
-      <stop offset="0" stop-color="#f7d774" stop-opacity="0.85"/>
-      <stop offset="0.6" stop-color="#f2c94c" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#f2c94c" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="4"/>
-    </filter>`;
-  svg.appendChild(d);
+/* Labels live in an HTML layer above the SVG: crisp text at any zoom, and a
+   generous click target for the monument underneath. */
+function renderLabels() {
+  const host = $('#labels');
+  host.textContent = '';
+  for (const n of S.graph.nodes) {
+    const b = document.createElement('button');
+    b.className = 'mlabel';
+    b.dataset.node = n.id;
+    b.classList.toggle('is-goal', !!n.goal);
+    b.innerHTML = `<span class="mlabel-step">${n.goal ? 'Summit' : `Step ${n.depth + 1}`}</span>`
+      + '<span class="mlabel-text"></span>';
+    b.addEventListener('click', () => onNodeClick(n.id));
+    host.appendChild(b);
+  }
+  positionLabels();
 }
 
-function buildWorld() {
-  const svg = $('#world');
-  const viewport = $('#viewport');
-  svg.querySelectorAll('defs').forEach((x) => x.remove());
-  viewport.querySelectorAll(':scope > .stars').forEach((x) => x.remove());
-  buildDefs(svg);
-  renderWorldStructure();
-  fitView();
+const LABEL_RANK = { available: 0, complete: 1, locked: 2 };
 
-  const hub = S.graph.nodes.find((n) => n.depth === 0) || S.graph.nodes[0];
-  placeAvatar(hub, true);
-  S.at = hub.id;
-  updateHud();
+function positionLabels() {
+  if (!S.graph) return;
+  const r = $('#world').getBoundingClientRect();
+  // Zoomed right out the world should read as a silhouette, not a pin board.
+  const sparse = view.k < 0.42;
+  const wanted = [];
+
+  for (const l of $$('#labels .mlabel')) {
+    const n = S.nodeById.get(l.dataset.node);
+    const st = statusOf(n);
+    const x = n.anchor.x * view.k + view.x;
+    const y = n.anchor.y * view.k + view.y + 22 * Math.max(0.6, view.k);
+    // Locked places only announce themselves once they are one step away —
+    // the rest of the world keeps its mystery.
+    const frontier = st !== 'locked' || n.goal || n.deps.some((d) => S.done.has(d));
+    const on = x > -160 && x < r.width + 160 && y > -60 && y < r.height + 60
+      && frontier && (!sparse || st !== 'locked' || n.goal);
+    if (!on) { l.style.display = 'none'; continue; }
+    l.style.display = '';
+    l.style.transform = `translate(${x}px, ${y}px) translate(-50%, 0)`;
+    wanted.push({ l, x, y, rank: (n.goal ? -1 : LABEL_RANK[st] ?? 3) });
+  }
+
+  // Greedy de-collision: where names would pile up, the ones that matter most
+  // (the summit, then where you can go now) keep the space.
+  wanted.sort((a, b) => a.rank - b.rank || a.x - b.x);
+  const placed = [];
+  for (const w of wanted) {
+    const bw = w.l.offsetWidth || 120, bh = w.l.offsetHeight || 30;
+    const box = { x0: w.x - bw / 2, x1: w.x + bw / 2, y0: w.y, y1: w.y + bh };
+    const hit = placed.some((p) => box.x0 < p.x1 && p.x0 < box.x1 && box.y0 < p.y1 && p.y0 < box.y1);
+    if (hit) w.l.style.display = 'none';
+    else placed.push(box);
+  }
 }
 
-/* ----------------------------- camera ----------------------------- */
+/* -------------------------------- camera -------------------------------- */
 
 function applyView() {
   $('#viewport').setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
+  positionLabels();
   positionChoice();
 }
 
-function fitView() {
-  if (!S.graph) return;
+function fitView(animate = false) {
+  if (!S.scene) return;
   const r = $('#world').getBoundingClientRect();
-  const xs = S.graph.nodes.map((n) => n.sx);
-  const ys = S.graph.nodes.map((n) => n.sy);
-  const minX = Math.min(...xs) - 160, maxX = Math.max(...xs) + 160;
-  const minY = Math.min(...ys) - 260, maxY = Math.max(...ys) + 300;
-  const bw = maxX - minX, bh = maxY - minY;
-  view.k = Math.max(0.3, Math.min(r.width / bw, r.height / bh, 1.15));
-  view.x = (r.width - bw * view.k) / 2 - minX * view.k;
-  view.y = (r.height - bh * view.k) / 2 - minY * view.k;
-  applyView();
+  const b = S.scene.bounds;
+  const pad = r.width < 700 ? 40 : 110;
+  const k = clamp(Math.min((r.width - pad * 2) / (b.x1 - b.x0), (r.height - pad * 2 - 60) / (b.y1 - b.y0)), 0.14, 1.1);
+  const target = {
+    k,
+    x: (r.width - (b.x1 - b.x0) * k) / 2 - b.x0 * k,
+    y: (r.height - (b.y1 - b.y0) * k) / 2 - b.y0 * k + 20,
+  };
+  if (animate) glideTo(target); else { Object.assign(view, target); applyView(); }
+}
+
+/* Centre the camera on a grid point. */
+function focusOn(pt, zoom = null, animate = true) {
+  const r = $('#world').getBoundingClientRect();
+  const k = zoom ?? view.k;
+  const p = P(pt.x, pt.y, pt.z);
+  const target = { k, x: r.width * 0.42 - p.x * k, y: r.height * 0.58 - p.y * k };
+  if (animate) glideTo(target); else { Object.assign(view, target); applyView(); }
+}
+
+let glideRaf = null;
+function glideTo(target, ms = 700) {
+  cancelAnimationFrame(glideRaf);
+  if (S.reduced) { Object.assign(view, target); applyView(); return; }
+  const from = { ...view };
+  const t0 = performance.now();
+  const step = (now) => {
+    const u = clamp((now - t0) / ms, 0, 1);
+    const e = 1 - Math.pow(1 - u, 3);
+    view.x = from.x + (target.x - from.x) * e;
+    view.y = from.y + (target.y - from.y) * e;
+    view.k = from.k + (target.k - from.k) * e;
+    applyView();
+    if (u < 1) glideRaf = requestAnimationFrame(step);
+  };
+  glideRaf = requestAnimationFrame(step);
 }
 
 function bindCamera() {
   const svg = $('#world');
   let start = null;
+  const pointers = new Map();
+  let pinch = null;
 
   svg.addEventListener('pointerdown', (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = {
+        d: Math.hypot(a.x - b.x, a.y - b.y), k: view.k,
+        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, vx: view.x, vy: view.y,
+      };
+      start = null;
+      return;
+    }
     start = { px: e.clientX, py: e.clientY, vx: view.x, vy: view.y };
     svg.setPointerCapture(e.pointerId);
     svg.classList.add('panning');
   });
+
   svg.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const r = svg.getBoundingClientRect();
+      const k = clamp(pinch.k * (d / pinch.d), 0.14, 2.2);
+      const mx = pinch.cx - r.left, my = pinch.cy - r.top;
+      view.x = mx - ((mx - pinch.vx) / pinch.k) * k;
+      view.y = my - ((my - pinch.vy) / pinch.k) * k;
+      view.k = k;
+      didDrag = true;
+      applyView();
+      return;
+    }
     if (!start) return;
     const dx = e.clientX - start.px, dy = e.clientY - start.py;
     if (Math.abs(dx) + Math.abs(dy) > 6) didDrag = true;
@@ -446,96 +333,59 @@ function bindCamera() {
     view.y = start.vy + dy;
     applyView();
   });
-  svg.addEventListener('pointerup', () => {
-    start = null;
-    svg.classList.remove('panning');
-    setTimeout(() => (didDrag = false), 0);
-  });
-  svg.addEventListener(
-    'wheel',
-    (e) => {
-      e.preventDefault();
-      const r = svg.getBoundingClientRect();
-      const mx = e.clientX - r.left, my = e.clientY - r.top;
-      const wx = (mx - view.x) / view.k, wy = (my - view.y) / view.k;
-      view.k = Math.min(2.5, Math.max(0.3, view.k * Math.exp(-e.deltaY * 0.0015)));
-      view.x = mx - wx * view.k;
-      view.y = my - wy * view.k;
-      applyView();
-    },
-    { passive: false },
-  );
-  window.addEventListener('resize', fitView);
-}
 
-/* ------------------------------ avatar ------------------------------ */
-
-function avatarSet(x, y) {
-  $('#avatar').setAttribute('transform', `translate(${x} ${y})`);
-}
-
-const standPoint = (node) => nodeTop(node); // avatar stands on the roof
-
-/* Teleport the avatar to stand on a node (initial placement). */
-function placeAvatar(node, instant = true) {
-  const p = standPoint(node);
-  S.avatar = { x: p.x, y: p.y };
-  S.at = node.id;
-  avatarSet(p.x, p.y);
-}
-
-/* Walk the avatar to `node` along the graph, following the actual walkways,
-   then call done(). */
-function walkTo(node, done) {
-  if (S.walking) return;
-  if (!S.at || S.at === node.id) {
-    placeAvatar(node, true);
-    done && done();
-    return;
-  }
-  const path = findPath(S.at, node.id);
-  S.walking = true;
-  $('#avatar').classList.add('walking');
-
-  const points = [];
-  const byId = new Map(S.graph.nodes.map((n) => [n.id, n]));
-  let cur = { ...S.avatar };
-  points.push(cur);
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = byId.get(path[i]);
-    const b = byId.get(path[i + 1]);
-    const A = nodeTop(a), B = nodeTop(b);
-    // walk in a straight line across the rooftops and stair-bridges
-    const seg = samplePath(`M ${A.x} ${A.y} L ${B.x} ${B.y}`);
-    // drop the first point of each segment to avoid duplicates at nodes
-    for (let j = 1; j < seg.length; j++) points.push(seg[j]);
-  }
-  const stand = standPoint(node);
-  points.push(stand);
-
-  let idx = 0;
-  const bobEl = $('#avatar .av-bob');
-  const stepOnce = () => {
-    if (idx >= points.length) {
-      S.walking = false;
-      $('#avatar').classList.remove('walking');
-      S.avatar = stand;
-      S.at = node.id;
-      bobEl.setAttribute('transform', 'translate(0 0)');
-      done && done();
-      return;
+  const end = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!pointers.size) {
+      start = null;
+      svg.classList.remove('panning');
+      setTimeout(() => (didDrag = false), 0);
     }
-    const p = points[idx];
-    avatarSet(p.x, p.y);
-    // little hop bob while walking
-    bobEl.setAttribute('transform', `translate(0 ${-Math.abs(Math.sin(idx * 0.5)) * 5})`);
-    idx++;
-    S.anim = setTimeout(stepOnce, 16);
   };
-  stepOnce();
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = svg.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const wx = (mx - view.x) / view.k, wy = (my - view.y) / view.k;
+    view.k = clamp(view.k * Math.exp(-e.deltaY * 0.0015), 0.14, 2.2);
+    view.x = mx - wx * view.k;
+    view.y = my - wy * view.k;
+    applyView();
+  }, { passive: false });
+
+  // clicking the stone itself travels there, not just the label
+  $('#world-structure').addEventListener('click', (e) => {
+    if (didDrag) { didDrag = false; return; }
+    const g = e.target.closest('[data-node]');
+    if (g) onNodeClick(g.dataset.node);
+  });
+  $('#world-structure').addEventListener('keydown', (e) => {
+    const g = e.target.closest('[data-node]');
+    if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onNodeClick(g.dataset.node); }
+  });
+  window.addEventListener('resize', () => { positionLabels(); positionChoice(); });
 }
 
-/* BFS shortest path (fewest hops) between two node ids. */
+/* -------------------------------- avatar -------------------------------- */
+
+function drawAvatar(pt) {
+  const p = P(pt.x, pt.y, pt.z);
+  $('#avatar').setAttribute('transform', `translate(${p.x} ${p.y})`);
+  avatarPos = pt;
+}
+
+function placeAvatar(node) {
+  S.at = node.id;
+  drawAvatar(node.stand);
+}
+
+const edgeKey = (a, b) => `${a} ${b}`;
+
+/* Fewest-hops path across the causeway network. */
 function findPath(fromId, toId) {
   if (fromId === toId) return [fromId];
   const adj = new Map();
@@ -552,12 +402,7 @@ function findPath(fromId, toId) {
   while (q.length) {
     const u = q.shift();
     if (u === toId) break;
-    for (const v of adj.get(u) || []) {
-      if (!prev.has(v)) {
-        prev.set(v, u);
-        q.push(v);
-      }
-    }
+    for (const v of adj.get(u) || []) if (!prev.has(v)) { prev.set(v, u); q.push(v); }
   }
   if (!prev.has(toId)) return [fromId, toId];
   const path = [];
@@ -565,42 +410,90 @@ function findPath(fromId, toId) {
   return path;
 }
 
-/* Sample an SVG path string into world points using a hidden probe path. */
-let probePath = null;
-function samplePath(d) {
-  const svg = $('#world');
-  if (!probePath) {
-    probePath = el('path', { fill: 'none', stroke: 'none', 'aria-hidden': 'true' });
-    probePath.style.visibility = 'hidden';
-    svg.appendChild(probePath);
+/* The real causeway geometry for a hop sequence — the avatar walks the stone
+   that is actually drawn, staircases included. */
+function routePoints(path) {
+  const out = [avatarPos];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const fwd = S.edgeMap.get(edgeKey(a, b));
+    const rev = S.edgeMap.get(edgeKey(b, a));
+    if (fwd) out.push(...fwd.walk);
+    else if (rev) out.push(...[...rev.walk].reverse());
+    out.push(S.nodeById.get(b).stand);
   }
-  probePath.setAttribute('d', d);
-  const len = probePath.getTotalLength();
-  const pts = [];
-  const n = Math.max(6, Math.ceil(len / 16));
-  for (let i = 0; i <= n; i++) {
-    const pt = probePath.getPointAtLength((i / n) * len);
-    pts.push({ x: pt.x, y: pt.y });
-  }
-  return pts;
+  return out;
 }
 
-/* ------------------------------ lessons ------------------------------ */
+let walkRaf = null;
+function walkTo(node, done) {
+  if (S.walking) return;
+  if (!S.at || S.at === node.id) { placeAvatar(node); done && done(); return; }
+  if (S.reduced) { placeAvatar(node); focusOn(node.stand, null, false); done && done(); return; }
+
+  const pts = routePoints(findPath(S.at, node.id));
+  // arc-length parameterise in screen space so the pace reads evenly
+  const scr = pts.map((p) => P(p.x, p.y, p.z));
+  const seg = [];
+  let total = 0;
+  for (let i = 1; i < scr.length; i++) {
+    const d = Math.hypot(scr[i].x - scr[i - 1].x, scr[i].y - scr[i - 1].y);
+    seg.push(d);
+    total += d;
+  }
+  if (total < 1) { placeAvatar(node); done && done(); return; }
+
+  const dur = clamp((total / 300) * 1000, 550, 5200);
+  const av = $('#avatar');
+  av.classList.add('walking');
+  S.walking = true;
+  const t0 = performance.now();
+
+  // requestAnimationFrame stops in a backgrounded tab, and a throw inside the
+  // step would otherwise leave S.walking true forever and make the whole world
+  // unclickable. This guarantees the walk always ends.
+  const arrive = () => {
+    if (!S.walking) return;
+    cancelAnimationFrame(walkRaf);
+    clearTimeout(walkGuard);
+    S.walking = false;
+    av.classList.remove('walking');
+    placeAvatar(node);
+    focusOn(node.stand, null, false);
+    done && done();
+  };
+  const walkGuard = setTimeout(arrive, dur + 600);
+
+  const step = (now) => {
+    const u = clamp((now - t0) / dur, 0, 1);
+    let want = u * total, i = 0;
+    while (i < seg.length - 1 && want > seg[i]) { want -= seg[i]; i++; }
+    const f = seg[i] ? clamp(want / seg[i], 0, 1) : 0;
+    const a = pts[i], b = pts[i + 1] || pts[i];
+    drawAvatar({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f });
+    focusOn(avatarPos, null, false);
+    if (u < 1) { walkRaf = requestAnimationFrame(step); return; }
+    arrive();
+  };
+  walkRaf = requestAnimationFrame(step);
+}
+
+/* -------------------------------- lessons ------------------------------- */
 
 function onNodeClick(id) {
-  const n = S.graph.nodes.find((x) => x.id === id);
-  if (!n) return;
+  const n = S.nodeById.get(id);
+  if (!n || S.walking) return;
   const st = statusOf(n);
   if (st === 'locked') {
-    const g = S.nodeEls.get(id);
-    g.classList.add('shake');
-    setTimeout(() => g.classList.remove('shake'), 500);
-    toast('That monument is still hidden — complete the glowing ones first.');
+    const g = $(`#world-structure [data-node="${CSS.escape(id)}"]`);
+    g?.classList.add('shake');
+    setTimeout(() => g?.classList.remove('shake'), 500);
+    toast('That way is still closed. Finish a lit monument to open it.');
     return;
   }
   hideChoice();
   S.currentNode = n;
-  walkTo(n, () => openSheet(n, st));
+  walkTo(n, () => openSheet(n, statusOf(n)));
 }
 
 function openSheet(n, st) {
@@ -611,22 +504,18 @@ function openSheet(n, st) {
     '<div class="sk w90"></div><div class="sk"></div><div class="sk w80"></div><div class="sk w60"></div>';
   $('#sheet-check').classList.add('hidden');
   $('#modal-backdrop').classList.add('show');
+  $('#sheet-close').focus();
 
-  loadLesson(n)
-    .then((lesson) => {
-      if (S.currentNode !== n || !$('#modal-backdrop').classList.contains('show')) return;
-      $('#sheet-content').innerHTML = lesson.content.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
-      if (st === 'complete') return; // reviewing: no quiz
-      renderCheck(n, lesson.check);
-    })
-    .catch(() => {
-      $('#sheet-content').innerHTML =
-        '<p class="sheet-error">Couldn’t load this lesson. <button class="ghost" id="retry-lesson">Retry</button></p>';
-      $('#retry-lesson')?.addEventListener('click', () => {
-        S.lessonCache.delete(n.id);
-        openSheet(n, st);
-      });
-    });
+  loadLesson(n).then((lesson) => {
+    if (S.currentNode !== n || !$('#modal-backdrop').classList.contains('show')) return;
+    $('#sheet-content').innerHTML = lesson.content.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+    if (st === 'complete') return;
+    renderCheck(n, lesson.check);
+  }).catch(() => {
+    $('#sheet-content').innerHTML =
+      '<p class="sheet-error">Could not load this lesson. <button class="ghost" id="retry-lesson">Retry</button></p>';
+    $('#retry-lesson')?.addEventListener('click', () => { S.lessonCache.delete(n.id); openSheet(n, st); });
+  });
 }
 
 async function loadLesson(n) {
@@ -645,8 +534,7 @@ async function loadLesson(n) {
 }
 
 function renderCheck(n, check) {
-  const wrap = $('#sheet-check');
-  wrap.classList.remove('hidden');
+  $('#sheet-check').classList.remove('hidden');
   $('#check-q').textContent = check.question;
   const box = $('#check-opts');
   box.innerHTML = '';
@@ -664,14 +552,14 @@ function renderCheck(n, check) {
         settled = true;
         b.classList.add('correct');
         $$('.opt', box).forEach((o) => (o.disabled = true));
-        $('#check-expl').textContent = check.explanation || 'Correct!';
+        $('#check-expl').textContent = check.explanation || 'Correct.';
         $('#check-expl').classList.remove('hidden');
         $('#check-continue').classList.remove('hidden');
         completeNode(n);
       } else {
         b.classList.add('wrong');
         b.disabled = true;
-        toast('Not quite — try again.');
+        toast('Not quite — try another.');
       }
     });
     box.appendChild(b);
@@ -679,18 +567,16 @@ function renderCheck(n, check) {
 }
 
 function completeNode(n) {
-  const wasAvailable = new Set(
-    S.graph.nodes.filter((x) => statusOf(x) === 'available').map((x) => x.id),
-  );
+  const before = new Set(S.graph.nodes.filter((x) => statusOf(x) === 'available').map((x) => x.id));
   S.done.add(n.id);
   saveGame();
-  paintAll();
+  paintStatus();
   updateHud();
   for (const m of S.graph.nodes) {
-    if (statusOf(m) === 'available' && !wasAvailable.has(m.id)) {
-      const g = S.nodeEls.get(m.id);
-      g.classList.add('born');
-      setTimeout(() => g.classList.remove('born'), 900);
+    if (statusOf(m) === 'available' && !before.has(m.id)) {
+      const g = $(`#world-structure [data-node="${CSS.escape(m.id)}"]`);
+      g?.classList.add('born');
+      setTimeout(() => g?.classList.remove('born'), 1000);
     }
   }
   if (n.goal) setTimeout(celebrate, 700);
@@ -698,98 +584,82 @@ function completeNode(n) {
 
 function closeSheet() {
   $('#modal-backdrop').classList.remove('show');
-  // Monument Valley moment: when you finish somewhere with a fork, the world
-  // asks where you'd like to wander next.
   const n = S.currentNode;
   if (!n || n.goal) return;
-  const opts = S.graph.nodes.filter(
-    (m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available',
-  );
+  const opts = S.graph.nodes.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
   if (opts.length >= 2) showChoice(opts);
 }
 
-/* ------------------------- fork-in-the-road prompt ------------------------- */
+/* -------------------------- fork-in-the-road prompt ---------------------- */
 
 function showChoice(opts) {
-  const texts = ['The path splits here…', 'Two ways onward…', 'Where to next, wanderer?'];
-  $('#choice-text').textContent = texts[Math.floor(Math.random() * texts.length)];
+  const texts = ['The path divides here.', 'Two ways lead onward.', 'Which way, wanderer?'];
+  $('#choice-text').textContent = texts[hash(opts.map((o) => o.id).join('')) % texts.length];
   const list = $('#choice-list');
   list.innerHTML = '';
   for (const n of opts) {
     const b = document.createElement('button');
     b.className = 'choice-opt';
     b.textContent = n.title;
-    b.addEventListener('click', () => {
-      hideChoice();
-      onNodeClick(n.id);
-    });
+    b.addEventListener('click', () => { hideChoice(); onNodeClick(n.id); });
     list.appendChild(b);
   }
   $('#choice').classList.remove('hidden');
   positionChoice();
 }
+const hideChoice = () => $('#choice').classList.add('hidden');
 
-function hideChoice() {
-  $('#choice').classList.add('hidden');
-}
-
-/* Position the speech bubble near the avatar (follows the camera). */
 function positionChoice() {
-  if ($('#choice').classList.contains('hidden')) return;
-  const r = $('#world').getBoundingClientRect();
-  const sx = S.avatar.x * view.k + view.x;
-  const sy = S.avatar.y * view.k + view.y;
   const c = $('#choice');
-  c.style.left = Math.max(12, Math.min(r.width - c.offsetWidth - 12, sx - c.offsetWidth / 2)) + 'px';
-  c.style.top = Math.max(70, sy - 130 - c.offsetHeight) + 'px';
+  if (c.classList.contains('hidden')) return;
+  const r = $('#world').getBoundingClientRect();
+  const p = P(avatarPos.x, avatarPos.y, avatarPos.z);
+  const sx = p.x * view.k + view.x, sy = p.y * view.k + view.y;
+  c.style.left = clamp(sx - c.offsetWidth / 2, 12, r.width - c.offsetWidth - 12) + 'px';
+  c.style.top = Math.max(84, sy - 70 * view.k - c.offsetHeight) + 'px';
 }
 
-/* ----------------------------- celebration ----------------------------- */
+/* ------------------------------ celebration ----------------------------- */
 
 function celebrate() {
   closeSheet();
-  const ordered = [...S.graph.nodes].sort((a, b) => a.depth - b.depth || a.sx - b.sx);
+  const ordered = [...S.graph.nodes].sort((a, b) => a.depth - b.depth || a.gy - b.gy);
   $('#recap').innerHTML = ordered.map((n) => `<li>${escapeHtml(n.title)}</li>`).join('');
   $('#cel-title').textContent = S.title || S.topic;
   $('#cel-overlay').classList.remove('hidden');
+  fitView(true);
   confetti();
 }
 
 function confetti() {
+  if (S.reduced) return;
   const c = $('#confetti');
   c.innerHTML = '';
-  const colors = ['#f4a28e', '#9adfc3', '#b9a8e3', '#f2d49b', '#8fc1e3', '#f2c94c'];
-  for (let i = 0; i < 30; i++) {
+  const colors = [S.chapter.s[1], S.chapter.a[0], S.chapter.t[1], GOLD.s[1], S.chapter.a[1]];
+  for (let i = 0; i < 34; i++) {
     const d = document.createElement('i');
     d.className = 'cf';
     d.style.left = `${Math.random() * 100}%`;
     d.style.background = colors[i % colors.length];
-    d.style.animationDuration = `${1.6 + Math.random() * 1.8}s`;
-    d.style.animationDelay = `${Math.random() * 0.5}s`;
+    d.style.animationDuration = `${1.8 + Math.random() * 2}s`;
+    d.style.animationDelay = `${Math.random() * 0.6}s`;
     c.appendChild(d);
   }
-  setTimeout(() => (c.innerHTML = ''), 4500);
+  setTimeout(() => (c.innerHTML = ''), 4800);
 }
 
-/* ------------------------------- journey ------------------------------- */
+/* -------------------------------- journey ------------------------------- */
 
 const LOAD_MSGS = [
-  'Reading your goal…',
-  'Sketching the learning graph…',
-  'Raising islands from the mist…',
-  'Building little bridges…',
-  'Placing the final flag…',
+  'Reading your goal…', 'Charting the path…', 'Cutting stone…',
+  'Raising the causeways…', 'Setting the summit stone…',
 ];
 let loadTimer = null;
-
 function cycleLoadingMessages() {
   let i = 0;
   const msg = $('#loading-msg');
   msg.textContent = LOAD_MSGS[0];
-  loadTimer = setInterval(() => {
-    i = (i + 1) % LOAD_MSGS.length;
-    msg.textContent = LOAD_MSGS[i];
-  }, 1600);
+  loadTimer = setInterval(() => { i = (i + 1) % LOAD_MSGS.length; msg.textContent = LOAD_MSGS[i]; }, 1700);
 }
 
 async function startJourney(topic, { restore = false } = {}) {
@@ -802,10 +672,10 @@ async function startJourney(topic, { restore = false } = {}) {
   $('#btn-begin').disabled = true;
 
   const save = loadSave();
-  if (restore && save && save.graph && save.topic.toLowerCase() === topic.toLowerCase()) {
+  if (restore && save?.graph && save.topic?.toLowerCase() === topic.toLowerCase()) {
     Object.assign(S, {
-      topic: save.topic, title: save.title, graph: save.graph,
-      source: save.source, done: new Set(save.done), lessonCache: new Map(),
+      topic: save.topic, title: save.title, graph: save.graph, source: save.source,
+      done: new Set(save.done), lessonCache: new Map(),
     });
     enterWorld();
     $('#btn-begin').disabled = false;
@@ -822,7 +692,7 @@ async function startJourney(topic, { restore = false } = {}) {
         body: JSON.stringify({ topic }),
         signal: AbortSignal.timeout(90000),
       }),
-      wait(1500),
+      wait(1400),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -844,10 +714,23 @@ async function startJourney(topic, { restore = false } = {}) {
 }
 
 function enterWorld() {
-  computeLayout(S.graph);
+  applyChapter(S.topic);
+  layout(S.graph);
+  S.nodeById = new Map(S.graph.nodes.map((n) => [n.id, n]));
+  S.scene = buildScene(S.graph);
+  S.edgeMap = new Map(S.scene.edges.map((e) => [edgeKey(e.from, e.to), e]));
   showScreen('screen-world');
-  buildWorld();
-  $('#demo-badge').classList.toggle('hidden', S.source !== 'fallback');
+  renderWorld();
+  fitView();
+
+  const start = S.graph.nodes.find((n) => n.depth === 0) || S.graph.nodes[0];
+  placeAvatar(start);
+  updateHud();
+  // establishing wide shot of the whole journey, then move in to walking
+  // distance — close enough that the traveller reads as a figure, but far
+  // enough on a phone that you can still see where the path goes
+  const r = $('#world').getBoundingClientRect();
+  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.5 : 0.82), 950);
 }
 
 function updateHud() {
@@ -855,49 +738,47 @@ function updateHud() {
   const total = S.graph ? S.graph.nodes.length : 0;
   $('#hud-count').textContent = `${S.done.size}/${total}`;
   $('#hud-fill').style.width = total ? `${(S.done.size / total) * 100}%` : '0%';
+  $('#demo-badge').classList.toggle('hidden', S.source !== 'fallback');
 }
 
 function refreshResume() {
   const save = loadSave();
   const b = $('#resume');
-  if (save && save.graph) {
+  if (save?.graph) {
     $('#resume-title').textContent = save.title || save.topic;
     b.classList.remove('hidden');
-  } else {
-    b.classList.add('hidden');
-  }
+  } else b.classList.add('hidden');
 }
 
-/* -------------------------------- init -------------------------------- */
+/* --------------------------------- init --------------------------------- */
 
 function init() {
+  S.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   bindCamera();
 
-  $('#topic-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    startJourney($('#topic-input').value);
-  });
-  $$('#chips .chip').forEach((c) =>
-    c.addEventListener('click', () => {
-      $('#topic-input').value = c.dataset.topic;
-      startJourney(c.dataset.topic);
-    }),
-  );
+  $('#topic-form').addEventListener('submit', (e) => { e.preventDefault(); startJourney($('#topic-input').value); });
+  $$('#chips .chip').forEach((c) => c.addEventListener('click', () => {
+    $('#topic-input').value = c.dataset.topic;
+    startJourney(c.dataset.topic);
+  }));
   $('#resume').addEventListener('click', () => {
     const save = loadSave();
     if (save) startJourney(save.topic, { restore: true });
   });
 
-  $('#btn-home').addEventListener('click', () => {
-    showScreen('screen-home');
-    refreshResume();
+  $('#btn-home').addEventListener('click', () => { showScreen('screen-home'); refreshResume(); });
+  $('#btn-fit').addEventListener('click', () => fitView(true));
+  $('#btn-here').addEventListener('click', () => {
+    const next = S.graph?.nodes.find((n) => statusOf(n) === 'available') || S.nodeById.get(S.at);
+    if (next) focusOn(next.stand, clamp(Math.max(view.k, 0.75), 0.14, 1.4));
   });
-  $('#btn-fit').addEventListener('click', fitView);
 
   $('#sheet-close').addEventListener('click', closeSheet);
   $('#check-continue').addEventListener('click', closeSheet);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSheet();
+    if (e.key === 'Escape') { closeSheet(); hideChoice(); }
+    if (e.key === 'f' && $('#screen-world').classList.contains('active')
+      && !$('#modal-backdrop').classList.contains('show')) fitView(true);
   });
 
   $('#btn-again').addEventListener('click', () => {

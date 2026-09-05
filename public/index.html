@@ -2,26 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Graph Valley — learn anything, one island at a time</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Graph Valley — learn anything, one monument at a time</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
-  <script defer src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </head>
 <body>
 
   <!-- ============ HOME ============ -->
   <main id="screen-home" class="screen active">
-    <div class="gem g1"></div><div class="gem g2"></div><div class="gem g3"></div>
-    <div class="gem g4"></div><div class="gem g5"></div>
+    <div class="home-sky" aria-hidden="true">
+      <i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i>
+    </div>
     <section class="hero">
-      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
-        <polygon points="20,2 38,12 20,22 2,12" fill="#f4a28e"/>
-        <polygon points="2,12 20,22 20,38 2,28" fill="#d97f6b"/>
-        <polygon points="38,12 20,22 20,38 38,28" fill="#b85f4e"/>
+      <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+        <polygon points="32,4 62,20 32,36 2,20" fill="#fbeedd"/>
+        <polygon points="2,20 32,36 32,60 2,44" fill="#eec49f"/>
+        <polygon points="62,20 32,36 32,60 62,44" fill="#d79a72"/>
+        <polygon points="32,4 47,12 32,20 17,12" fill="#4fb3a5" opacity="0.9"/>
       </svg>
       <h1>What do you want<br />to learn today?</h1>
-      <p class="sub">Type anything. We chart the path. You walk it.</p>
+      <p class="sub">Type anything. We carve the path. You walk it.</p>
       <form id="topic-form" autocomplete="off">
         <input id="topic-input" type="text" maxlength="200"
                placeholder="e.g. how black holes work, sourdough, the French Revolution…" />
@@ -40,10 +42,10 @@
   <!-- ============ LOADING ============ -->
   <div id="screen-loading" class="screen">
     <div class="loader">
-      <svg class="mark spin" viewBox="0 0 40 40" aria-hidden="true">
-        <polygon points="20,2 38,12 20,22 2,12" fill="#f4a28e"/>
-        <polygon points="2,12 20,22 20,38 2,28" fill="#d97f6b"/>
-        <polygon points="38,12 20,22 20,38 38,28" fill="#b85f4e"/>
+      <svg class="mark spin" viewBox="0 0 64 64" aria-hidden="true">
+        <polygon points="32,4 62,20 32,36 2,20" fill="#fbeedd"/>
+        <polygon points="2,20 32,36 32,60 2,44" fill="#eec49f"/>
+        <polygon points="62,20 32,36 32,60 62,44" fill="#d79a72"/>
       </svg>
       <p id="loading-msg">Reading your goal…</p>
     </div>
@@ -51,35 +53,54 @@
 
   <!-- ============ WORLD ============ -->
   <div id="screen-world" class="screen">
+    <div id="sky" aria-hidden="true">
+      <i id="sun"></i>
+      <i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i><i class="cloud c4"></i>
+    </div>
+
     <header id="hud">
-      <button id="btn-home" title="Start a new journey">‹ New</button>
+      <button id="btn-home" title="Start a new journey">New</button>
       <div id="hud-center">
         <div id="hud-title">—</div>
         <div id="hud-bar"><i id="hud-fill"></i></div>
       </div>
-      <span id="demo-badge" class="hidden" title="You're seeing built-in demo content. Restart the server with ANTHROPIC_API_KEY or OPENAI_API_KEY set for fully AI-generated journeys.">demo</span>
+      <span id="demo-badge" class="hidden"
+            title="Built-in demo content. Restart the server with ANTHROPIC_API_KEY or OPENAI_API_KEY set for fully AI-generated journeys.">demo</span>
       <span id="hud-count">0/0</span>
-      <button id="btn-fit" title="Fit the whole world on screen">Fit</button>
+      <button id="btn-here" title="Go to the next open monument">Next</button>
+      <button id="btn-fit" title="Fit the whole world on screen (F)">Fit</button>
     </header>
 
     <svg id="world" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="lampGlow">
+          <stop offset="0" stop-color="#fff6dd" stop-opacity="0.95"/>
+          <stop offset="0.45" stop-color="#ffe3a8" stop-opacity="0.35"/>
+          <stop offset="1" stop-color="#ffe3a8" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
       <g id="viewport">
         <g id="world-structure"></g>
-        <g id="avatar" transform="translate(0 0)">
-          <ellipse class="av-glow" cx="0" cy="-18" rx="21" ry="21" fill="url(#avatarGlow)" />
-          <ellipse class="av-shadow" rx="10" ry="4" cx="0" cy="4" />
-          <g class="av-bob">
-            <path class="av-robe" d="M0,-31 C7.5,-31 12,-25 13,-17 L15.5,-3 C16,1.5 9,4 0,4 C-9,4 -16,1.5 -15.5,-3 L-13,-17 C-12,-25 -7.5,-31 0,-31 Z" fill="#f7f2e6" />
-            <path class="av-shade" d="M2,-30 C8,-29 12,-24 13,-17 L15,-3 C13,-1 7,0 2,0 Z" fill="#e3dac4" opacity="0.8" />
-            <circle class="av-face" cx="0" cy="-16" r="5" fill="#37344a" />
-            <polygon class="av-hat" points="0,-47 7,-28 -7,-28" fill="#f7f2e6" />
+        <!-- the traveller: drawn last so she is never lost inside the stone -->
+        <g id="avatar">
+          <ellipse class="av-lamp" cx="0" cy="-24" rx="26" ry="26" fill="url(#lampGlow)" />
+          <ellipse class="av-shadow" cx="0" cy="1" rx="11" ry="5" />
+          <g class="av-body">
+            <circle class="av-face" cx="0" cy="-32" r="5.6" />
+            <path class="av-robe" d="M0,-29 C7.5,-29 11.5,-23 12.5,-16 L14.5,-3 C15,1 8,3 0,3 C-8,3 -15,1 -14.5,-3 L-12.5,-16 C-11.5,-23 -7.5,-29 0,-29 Z" />
+            <path class="av-shade" d="M1.4,-28.8 C8,-28 11.5,-23 12.5,-16 L14.5,-3 C12.5,-0.6 6,0.6 1.4,0.6 Z" />
+            <polygon class="av-hat" points="0,-57 10,-38.5 -10,-38.5" />
+            <polygon class="av-hat-shade" points="0,-57 10,-38.5 0,-38.5" />
+            <rect class="av-brim" x="-11" y="-39.2" width="22" height="2.8" rx="1.4" />
           </g>
         </g>
       </g>
     </svg>
+
+    <div id="labels"></div>
   </div>
 
-  <!-- ============ PATH CHOICE (Monument Valley style) ============ -->
+  <!-- ============ PATH CHOICE ============ -->
   <div id="choice" class="hidden">
     <div id="choice-bubble">
       <div id="choice-text"></div>
@@ -90,8 +111,8 @@
 
   <!-- ============ LESSON SHEET ============ -->
   <div id="modal-backdrop">
-    <div id="sheet" role="dialog" aria-modal="true">
-      <button id="sheet-close" title="Close">×</button>
+    <div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <button id="sheet-close" title="Close" aria-label="Close">×</button>
       <div id="sheet-kicker">LESSON</div>
       <h2 id="sheet-title"></h2>
       <p id="sheet-summary"></p>
@@ -109,13 +130,13 @@
   <!-- ============ CELEBRATION ============ -->
   <div id="cel-overlay" class="hidden">
     <div id="cel-card">
-      <svg class="mark big" viewBox="0 0 40 40" aria-hidden="true">
-        <polygon points="20,2 38,12 20,22 2,12" fill="#f2c94c"/>
-        <polygon points="2,12 20,22 20,38 2,28" fill="#d4ad3f"/>
-        <polygon points="38,12 20,22 20,38 38,28" fill="#a9852e"/>
+      <svg class="mark big" viewBox="0 0 64 64" aria-hidden="true">
+        <polygon points="32,4 62,20 32,36 2,20" fill="#fdf0c8"/>
+        <polygon points="2,20 32,36 32,60 2,44" fill="#f2cc63"/>
+        <polygon points="62,20 32,36 32,60 62,44" fill="#d9a63c"/>
       </svg>
       <h2>You reached the summit</h2>
-      <p id="cel-sub">You completed <strong><span id="cel-title"></span></strong>. Every island below is yours now.</p>
+      <p id="cel-sub">You completed <strong><span id="cel-title"></span></strong>. Every stone below is yours now.</p>
       <ol id="recap"></ol>
       <div class="row">
         <button id="btn-again" class="primary">Learn something new</button>

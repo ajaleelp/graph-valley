@@ -44,57 +44,108 @@ daily pull** yet. Monument Valley sells *completion* as the mechanism; a
 ## 2. Rendering: the long road to "Monument Valley"
 
 This went through several full rebuilds after user feedback ("cubes and dotted
-lines", "still not monument", "screenshot looks broken"). What shipped, and why:
+lines", "still not monument", "screenshot looks broken", and finally "I am really
+struggling to get the Monument Valley world I want"). What shipped, and why:
 
 1. **Pastel floating islands + dotted edges** (v1) — read as a graph, not a world.
-2. **Dark mystic night theme + cute avatar** — pretty, but user's reference was
-   a **light, airy** game. Dark theme was abandoned.
-3. **Continuous structure** — the big pivot: one isometric structure instead of
-   islands. Tall coral towers + cream rooftops + heavy stair-causeways.
-4. **Varied castles** — replaced identical boxes with 6 procedural building
-   variants (gate/twin/keep/tall/court/temple), dark pointed roofs, pennants,
-   domes, arched doorways, tapering bases, per-castle accent colors.
-5. **Label bugfix** — floating text was labels anchored to the node *origin*
-   while buildings hung *downward*. Now labels anchor below the base via
-   `baseBottom()`, and locked nodes show **no label at all** (no more "???").
+2. **Dark mystic night theme + cute avatar** — pretty, but the reference was a
+   **light, airy** game. Dark theme was abandoned.
+3. **Continuous structure** — one structure instead of islands. Coral towers +
+   cream rooftops + stair-causeways.
+4. **Varied castles** — six procedural building variants with cone roofs,
+   pennants, domes.
+5. **Full isometric rewrite** (current) — steps 3 and 4 still did not look like
+   the reference, and the reasons were structural, not cosmetic:
+
+   - There was **no isometric projection**. `addBlock()` invented three faces in
+     screen space from a "half-width" heuristic, so nothing lined up and the
+     result read as a pile rather than a building.
+   - The **layout was a jittered radial scatter** with random elevations.
+     Monument Valley geometry is orthogonal and gridded; a scatter can never
+     look like it.
+   - **Occlusion was approximate** (`sy + elev`, with all connectors drawn
+     first), so bridges crossed through towers.
+   - The **vocabulary was wrong**: cone roofs and pennant flags are fairy-tale
+     castle, not Monument Valley, which is cuboids, staircases, arches,
+     colonnades, ziggurats and domes.
+   - The **palette was four shades of the same coral**, and locked nodes were
+     `grayscale(0.75)`, which drained most of the world of colour on first sight.
+
+   The rewrite addresses each of those directly — see `iso.js` and `world.js`.
+
+### How the current renderer works
+
+- **Projection** (`iso.js`): `TW = 32, TH = 16, TZ = 32`. Because `TZ === 2 * TH`
+  the view direction in grid space is exactly `(1, 1, 1)`, which is what makes
+  the depth sort below exact. `+x` is the screen-right face, `+y` the
+  screen-left face.
+- **Depth sort**: drawables are grouped (one group per monument, one per
+  causeway leg — legs are split so every bounding box stays compact). Box A is
+  strictly in front of B when A lies entirely on the near side along any one
+  axis; that partial order is resolved by Kahn's algorithm. Pairs whose *screen*
+  bounding boxes miss each other are never compared, which keeps it fast.
+  Anything left in a cycle falls back to a `x0 + y0 + z0` key, so nothing is
+  ever dropped.
+- **Layout** (`world.js`): depth layers advance along `+x` by `SPAN = 15`,
+  siblings fan along `+y` by `LANE = 9`, and each layer gains `RISE = 10`
+  levels. `RISE > SPAN / 2` is the condition for the world to climb up-screen
+  rather than sag — that single inequality is what turns a row of towers into
+  an ascent.
+- **Causeways**: step out of A along `+x`, cross to the target lane inside the
+  corridor between layers, then climb in. The corridor is wide enough
+  (`SPAN - footprint`) that the climb is a real staircase at roughly 1.3 levels
+  per cell. Layer-skipping edges detour to a lane behind the world first.
+- **Monuments** keep a two-cell lane clear through the middle at deck level, so
+  the traveller can walk through; anything crossing that lane does so overhead
+  as an arch or a bridge. That constraint is what makes the archetypes feel like
+  places rather than props.
+- **Colour**: one chapter palette per topic (deterministic from a hash) exposed
+  as CSS custom properties. State is an attribute selector on the group
+  (`[data-st]`), so completion animates as a `fill` transition to gold with no
+  re-render.
 
 ### Known rendering limitations
 
-- **Occlusion is approximate.** Nodes are depth-sorted by `sy + elev` and drawn
-  back-to-front, so at some camera angles a far bridge can cross in front of a
-  near tower's face. True iso z-ordering (or WebGL) would fix it. The avatar is
-  always drawn on top.
-- **No impossible geometry yet.** The signature Monument Valley moment — Penrose
-  stairs, rotating/pivoting bridges — is not implemented. This is the single
-  most impactful "wow" addition available.
-- **No vertical climbing.** Walkways connect rooftops; the reference also climbs
-  *up* tower faces / spiral stairs.
-- **Layout is radial-by-depth.** Works well and spreads in all directions, but it
-  does not run edge-routing, so on sparse graphs outer causeways can fan.
-- Text labels live in SVG `foreignObject` (fine in modern browsers; not rendered
-  by headless rasterizers like `svglib`).
+- **No impossible geometry.** The signature Monument Valley moment — Penrose
+  stairs, rotating/pivoting bridges — is still not implemented. It is now much
+  more tractable than before (there is a real grid and an exact depth sort to
+  build on), and it remains the single biggest "wow" addition available.
+- **No vertical climbing.** Causeways connect decks; the reference also climbs
+  *up* tower faces and spiral stairs.
+- **The spine is linear.** Layers march along one axis. A switchback layout
+  (alternating `+x` and `-y`) would be more compact and more like a real level,
+  but it complicates causeway routing, which currently assumes one advance axis.
+- **Steep stairs.** Climbing enough to read as an ascent forces ~1.3–1.5 levels
+  per cell. Switchback staircases would let it be both steep and gentle.
+- **Contact shadows are placed by hand** per archetype rather than derived, so a
+  new archetype has to remember to cast one.
 
 ---
 
-## 3. Walkability & how the avatar "walks"
+## 3. Walkability & how the traveller walks
 
-The avatar walks straight-line segments between rooftops (`nodeTop`), sampled
-over the actual walkway path via a hidden SVG probe path (`getPointAtLength`).
-This looked fine at the density tested, but:
+Each causeway stores the centre-line of the stone it draws (`edge.walk`, in grid
+coordinates), including one point per stair tread. Travel is a BFS over the
+undirected graph, then the matching walk polylines are concatenated — reversed
+when travelling against the dependency direction. The walk is parameterised by
+*screen* arc length so the pace looks even whether she is crossing a flat
+causeway or climbing.
 
-- points are generated at fixed 16px intervals — very long causeways are slower;
-- a future BFS could be upgraded to walk *along the visual walkway* including
-  steps by sampling the connector's own geometry rather than a straight line.
+One bug worth remembering: `requestAnimationFrame` stops in a backgrounded tab,
+and the walk used to leave `S.walking = true` forever if it never completed —
+which silently made the entire world unclickable. Every walk now has a
+`setTimeout` guard that finalises it regardless.
 
 ---
 
 ## 4. Tooling / environment notes
 
-- **Headless preview without puppeteer/playwright:** a throwaway Node harness
-  (`/tmp/render_world.mjs`, not committed) imports the pure geometry functions
-  from `app.js`, emits an SVG, and rasterizes via Python `svglib`+`reportlab`.
-  It cannot resolve CSS `var()` fills, so the harness bakes per-node colors into
-  per-group CSS classes. Useful if you continue iterating blind.
+- **`iso.js` and `world.js` are pure** — no DOM, no browser globals — so they
+  import straight into Node for geometry work or a headless SVG dump. `app.js`
+  is the only file that touches the DOM.
+- Colours live in CSS custom properties, not in the geometry, so a headless
+  rasteriser that cannot resolve `var()` will render the world as flat black
+  unless you inline a palette first.
 - Server is intentionally **zero-dependency** (`node server.mjs`). Bumping to
   Node ≥ 18 required — everything else is stdlib.
 
@@ -103,8 +154,10 @@ This looked fine at the density tested, but:
 ## 5. Immediate next steps (ranked)
 
 1. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
-   possible; a bridge that swings to connect two towers when you tap it.
-2. **Occlusion sort** — proper painter's order so bridges never cross towers.
+   possible; a bridge that swings to connect two decks when you tap it. The grid
+   and the exact depth sort now make this buildable.
+2. **Switchback causeways** — would let the world climb steeply while keeping
+   the staircases gentle, and would make the layout far more compact.
 3. **Global journey cache + pre-review** of popular topics (cost + quality).
 4. **Clarifying question before generation** (level/scope) — biggest curriculum
    quality win.

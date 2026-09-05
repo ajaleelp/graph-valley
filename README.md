@@ -6,9 +6,10 @@ Graph Valley is a gamified, AI-driven way to learn anything. You type a free-tex
 goal ("I want to learn how black holes work", "how the stock market works",
 "conversational Japanese"), and an LLM turns it into a step-by-step knowledge
 graph — which is then rendered as a single continuous **Monument Valley–inspired
-world**. Your little avatar walks the rooftops between monuments, and at each one
-you get a bite-sized lesson + a quick comprehension check. Answer correctly and
-the monument turns gold, lighting the way to the next.
+world**, drawn with a true isometric engine. A traveller walks the actual
+staircases and causeways between monuments, and at each one you get a
+bite-sized lesson + a quick comprehension check. Answer correctly and the
+monument turns gold, lighting the way to the next.
 
 The learning graph (prerequisites → concepts → goal) is the world itself.
 
@@ -19,17 +20,29 @@ The learning graph (prerequisites → concepts → goal) is the world itself.
 - **Free-text intent** — one input box, any topic, any level.
 - **LLM-generated curriculum** — a dependency DAG (no cycles, exactly one goal),
   validated on the server before it's ever rendered.
-- **One continuous structure, not separate islands** — chunky coral towers with
-  cream rooftops, dark pointed roofs, pennant flags, domes, arched doorways, and
-  tapering bases, joined by heavy stair-causeways and hanging pillars.
-- **6 building variants** — Gate (start), Twin, Keep, Tall, Court, and Temple
-  (goal), with per-castle accent palettes (coral / blush / terracotta / peach).
-- **The avatar really walks** — it traverses the actual walkways between
-  monuments (path-sampled from the SVG), not a dotted line.
+- **A true isometric engine** — everything sits on an integer 3D grid and is
+  projected 2:1, so a cell is a real cube. Solids are flat-shaded in three tones
+  (lid / left / right) with one light source from the left, and never outlined.
+- **Exact occlusion** — drawables are ordered by a topological sort over their
+  bounding boxes rather than an approximate depth key, so a causeway never
+  crosses in front of a tower it passes behind.
+- **8 monument archetypes** built from a Monument Valley vocabulary — plinths,
+  ziggurats, colonnades, arches, crenellated keeps, domed pavilions, sunken
+  courts, garden terraces — with varied footprints, heights and floating feet,
+  so ten monuments never read as ten identical towers.
+- **Real causeways** — every connection is an axis-aligned run of solid steps
+  routed through the corridor between layers. Edges that skip a layer detour
+  behind the world rather than spearing whatever is in the way.
+- **The traveller really walks them** — she follows the staircase geometry that
+  is actually drawn, and the camera tracks her.
+- **6 chapter palettes** (sandstone, rose, lagoon, lilac, verdigris, ember),
+  chosen deterministically from your topic, each with its own sky.
 - **Fork-in-the-road guidance** — when 2+ paths are open, a Monument Valley–style
   speech bubble asks where you'd like to go next.
-- **Mystery in the dark** — locked monuments are unlabeled; titles reveal only
-  when they're within reach.
+- **Mystery, without draining the world** — locked stone keeps its colour and
+  just recedes; unreached monuments read as "Undiscovered" until they are one
+  step away, and labels de-collide so the world never becomes a pin board. The
+  summit is always named — it is what you are walking toward.
 - **Lessons + checks** — each monument opens a lesson sheet generated per topic;
   a 4-option comprehension check gates your progress. Completed monuments turn
   gold.
@@ -91,18 +104,28 @@ Notes:
 ├── package.json        # {"start": "node server.mjs"} — nothing to install
 └── public/
     ├── index.html      # screens: home, loading, world, lesson sheet, fork-choice, celebration
-    ├── style.css       # creamy Monument Valley light theme (coral/cream, airy sky)
-    └── app.js          # radial layout, world structure renderer, avatar walking,
-                        #   fork prompts, lessons + checks, camera (pan/zoom), save/resume
+    ├── style.css       # flat Monument Valley palette: face tones as CSS vars, per-state
+    │                   #   overrides (gold / unlit), sky, HUD, sheet, labels
+    ├── iso.js          # the isometric engine: grid -> screen projection, solids, stairs,
+    │                   #   arches, domes, colonnades, contact shadows, topological depth sort
+    ├── world.js        # layout (layers climb along +x, siblings fan along +y), the eight
+    │                   #   monument archetypes, and causeway routing
+    └── app.js          # scene rendering, camera (pan / zoom / pinch / follow), the
+                        #   traveller's walk, labels, lessons + checks, save/resume
 ```
 
 ---
 
 ## Controls
 
-- **Click** a glowing monument — the avatar walks to it and the lesson opens.
-- **Drag** to pan, **scroll** to zoom, **Fit** re-frames the whole world.
+- **Click** a lit monument (or its label) — the traveller walks there and the
+  lesson opens.
+- **Drag** to pan, **scroll** or **pinch** to zoom.
+- **Next** jumps to the next open monument; **Fit** (or **F**) re-frames the
+  whole journey.
 - **Esc** closes the lesson sheet.
+- `prefers-reduced-motion` is honoured: the walk, drifting clouds, camera glide
+  and confetti all stand still.
 
 ---
 
