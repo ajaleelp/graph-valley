@@ -5,6 +5,8 @@
   "description": "Gamified AI learning: type a goal, get a traversable knowledge-graph world.",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "poc": "node poc/serve.mjs",
+    "poc:check": "node poc/check.mjs"
   }
 }

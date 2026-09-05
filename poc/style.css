@@ -1,0 +1,77 @@
+/* Whitebox palette. Four materials, three faces each: top lightest, the +y
+ * (screen-left) face mid, the +x (screen-right) face darkest. One light source,
+ * no gradients, no texture — the geometry has to carry the read on its own. */
+:root {
+  --bg: #eae4da;
+  --ink: #4a4034;
+
+  --s-t: #f2ece2;  --s-l: #d8cdbe;  --s-r: #c0b3a2;   /* stone: architecture   */
+  --t-t: #fbf6ed;  --t-l: #e3d8c9;  --t-r: #cdc0af;   /* travertine: decks, walkways */
+  --n-t: #b5a897;  --n-l: #9a8d7c;  --n-r: #82766a;   /* the roots below       */
+  --a-t: #f0a35e;  --a-l: #d98b47;  --a-r: #bd7434;   /* accent                */
+  --you: #2f6f6b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#app { position: fixed; inset: 0; }
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+#stage.dragging { cursor: grabbing; }
+
+header { position: absolute; top: 20px; left: 24px; pointer-events: none; }
+h1 { margin: 0; font-size: 17px; font-weight: 620; letter-spacing: -0.01em; }
+h1 span { font-weight: 400; opacity: 0.5; font-size: 13px; }
+header p { margin: 2px 0 0; opacity: 0.55; }
+
+#panel {
+  position: absolute; top: 20px; right: 20px; width: 226px;
+  background: #fdfaf4; border: 1px solid #ddd2c2; border-radius: 10px;
+  padding: 13px 14px; box-shadow: 0 6px 22px -14px #6b5c48;
+}
+#panel label { display: block; font-weight: 560; margin-bottom: 4px; }
+select { width: 100%; padding: 5px 6px; margin-top: 3px; border-radius: 6px;
+  border: 1px solid #d5c9b8; background: #fff; font: inherit; color: inherit; }
+.toggles { margin: 11px 0 4px; }
+.toggles label { font-weight: 400; display: flex; gap: 7px; align-items: center; margin: 0 0 3px; }
+.toggles input { margin: 0; }
+
+dl { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px;
+  margin: 10px 0 0; padding-top: 10px; border-top: 1px solid #e6dbcb; }
+dt { opacity: 0.6; }
+dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.hint { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid #e6dbcb;
+  opacity: 0.5; font-size: 12px; }
+
+#problems {
+  position: absolute; left: 24px; bottom: 20px; max-width: 380px;
+  background: #fbe6db; border: 1px solid #e2a98c; border-radius: 8px;
+  padding: 9px 11px; font-size: 12px; white-space: pre-wrap;
+}
+
+/* --- materials ---------------------------------------------------------- */
+.s-t { fill: var(--s-t); } .s-l { fill: var(--s-l); } .s-r { fill: var(--s-r); }
+.t-t { fill: var(--t-t); } .t-l { fill: var(--t-l); } .t-r { fill: var(--t-r); }
+.n-t { fill: var(--n-t); } .n-l { fill: var(--n-l); } .n-r { fill: var(--n-r); }
+.a-t { fill: var(--a-t); } .a-l { fill: var(--a-l); } .a-r { fill: var(--a-r); }
+
+.court { cursor: pointer; }
+.court:hover .t-t { fill: #fff; }
+
+/* --- overlays ----------------------------------------------------------- */
+#navlayer line { stroke: #2f6f6b; stroke-width: 1.6; opacity: 0.5; }
+#navlayer circle { fill: #2f6f6b; opacity: 0.75; }
+
+.label text { font: 600 12px ui-sans-serif, system-ui, sans-serif; fill: var(--ink); }
+.label rect { fill: #fdfaf4; stroke: #ddd2c2; }
+
+.kind text { font: 700 11px ui-monospace, monospace; fill: #8b7c68; }
+
+.you .body { fill: var(--you); }
+.you .head { fill: #3d8b85; }

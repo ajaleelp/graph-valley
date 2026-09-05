@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Graph Valley — slice POC</title>
+<link rel="stylesheet" href="style.css">
+<div id="app">
+  <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <header>
+    <h1>Graph&nbsp;Valley <span>slice POC</span></h1>
+    <p>A concept graph, stitched from four template slices.</p>
+  </header>
+
+  <div id="panel">
+    <label>Concept graph
+      <select id="graph"></select>
+    </label>
+    <div class="toggles">
+      <label><input type="checkbox" id="nav"> walkable graph</label>
+      <label><input type="checkbox" id="labels" checked> labels</label>
+      <label><input type="checkbox" id="cells"> slice kinds</label>
+    </div>
+    <dl id="stats"></dl>
+    <p class="hint">Click a platform to walk there. Drag to pan, scroll to zoom.</p>
+  </div>
+
+  <div id="problems" hidden></div>
+</div>
+<script type="module" src="main.js"></script>
