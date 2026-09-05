@@ -1,0 +1,10 @@
+{
+  "name": "graph-valley",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gamified AI learning: type a goal, get a traversable knowledge-graph world.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
