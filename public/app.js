@@ -385,17 +385,17 @@ function placeAvatar(node) {
 
 const edgeKey = (a, b) => `${a} ${b}`;
 
-/* Fewest-hops path across the causeway network. */
+/* Fewest-hops path across the causeway network.
+   The adjacency is built from the causeways that were actually carved, not
+   from every dependency — the world only builds stone for the transitive
+   reduction, and routing over an edge with no stone under it would teleport
+   the traveller through open sky. */
 function findPath(fromId, toId) {
   if (fromId === toId) return [fromId];
-  const adj = new Map();
-  for (const n of S.graph.nodes) {
-    if (!adj.has(n.id)) adj.set(n.id, []);
-    for (const d of n.deps) {
-      adj.get(n.id).push(d);
-      if (!adj.has(d)) adj.set(d, []);
-      adj.get(d).push(n.id);
-    }
+  const adj = new Map(S.graph.nodes.map((n) => [n.id, []]));
+  for (const e of S.scene.edges) {
+    adj.get(e.from).push(e.to);
+    adj.get(e.to).push(e.from);
   }
   const prev = new Map([[fromId, null]]);
   const q = [fromId];
@@ -425,6 +425,16 @@ function routePoints(path) {
   return out;
 }
 
+/* Consecutive waypoints must differ on at most one horizontal axis: the
+   causeways are axis-aligned, so a diagonal step would cut across open sky. */
+function assertOnStone(pts) {
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    if (Math.abs(b.x - a.x) > 0.02 && Math.abs(b.y - a.y) > 0.02) return false;
+  }
+  return true;
+}
+
 let walkRaf = null;
 function walkTo(node, done) {
   if (S.walking) return;
@@ -432,6 +442,14 @@ function walkTo(node, done) {
   if (S.reduced) { placeAvatar(node); focusOn(node.stand, null, false); done && done(); return; }
 
   const pts = routePoints(findPath(S.at, node.id));
+  if (!assertOnStone(pts)) {
+    // No continuous walkway to this monument. Better to step there than to
+    // glide across open sky, which is the one thing that reads as broken.
+    placeAvatar(node);
+    focusOn(node.stand, null, false);
+    done && done();
+    return;
+  }
   // arc-length parameterise in screen space so the pace reads evenly
   const scr = pts.map((p) => P(p.x, p.y, p.z));
   const seg = [];
@@ -730,7 +748,7 @@ function enterWorld() {
   // distance — close enough that the traveller reads as a figure, but far
   // enough on a phone that you can still see where the path goes
   const r = $('#world').getBoundingClientRect();
-  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.5 : 0.82), 950);
+  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.38 : 0.62), 950);
 }
 
 function updateHud() {
@@ -770,7 +788,7 @@ function init() {
   $('#btn-fit').addEventListener('click', () => fitView(true));
   $('#btn-here').addEventListener('click', () => {
     const next = S.graph?.nodes.find((n) => statusOf(n) === 'available') || S.nodeById.get(S.at);
-    if (next) focusOn(next.stand, clamp(Math.max(view.k, 0.75), 0.14, 1.4));
+    if (next) focusOn(next.stand, clamp(Math.max(view.k, 0.55), 0.14, 1.4));
   });
 
   $('#sheet-close').addEventListener('click', closeSheet);

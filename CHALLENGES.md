@@ -78,45 +78,88 @@ struggling to get the Monument Valley world I want"). What shipped, and why:
 - **Projection** (`iso.js`): `TW = 32, TH = 16, TZ = 32`. Because `TZ === 2 * TH`
   the view direction in grid space is exactly `(1, 1, 1)`, which is what makes
   the depth sort below exact. `+x` is the screen-right face, `+y` the
-  screen-left face.
-- **Depth sort**: drawables are grouped (one group per monument, one per
-  causeway leg — legs are split so every bounding box stays compact). Box A is
-  strictly in front of B when A lies entirely on the near side along any one
-  axis; that partial order is resolved by Kahn's algorithm. Pairs whose *screen*
-  bounding boxes miss each other are never compared, which keeps it fast.
-  Anything left in a cycle falls back to a `x0 + y0 + z0` key, so nothing is
-  ever dropped.
-- **Layout** (`world.js`): depth layers advance along `+x` by `SPAN = 15`,
-  siblings fan along `+y` by `LANE = 9`, and each layer gains `RISE = 10`
-  levels. `RISE > SPAN / 2` is the condition for the world to climb up-screen
-  rather than sag — that single inequality is what turns a row of towers into
-  an ascent.
-- **Causeways**: step out of A along `+x`, cross to the target lane inside the
-  corridor between layers, then climb in. The corridor is wide enough
-  (`SPAN - footprint`) that the climb is a real staircase at roughly 1.3 levels
-  per cell. Layer-skipping edges detour to a lane behind the world first.
-- **Monuments** keep a two-cell lane clear through the middle at deck level, so
-  the traveller can walk through; anything crossing that lane does so overhead
-  as an arch or a bridge. That constraint is what makes the archetypes feel like
-  places rather than props.
-- **Colour**: one chapter palette per topic (deterministic from a hash) exposed
-  as CSS custom properties. State is an attribute selector on the group
-  (`[data-st]`), so completion animates as a `fill` transition to gold with no
-  re-render.
+  screen-left face, and larger coordinates are nearer the camera.
+- **Depth sort, between groups**: drawables are grouped (one per monument, one
+  per piece of path). Box A is strictly in front of B when A lies entirely on
+  the near side along any one axis; that partial order is resolved by Kahn's
+  algorithm. Pairs whose *screen* bounding boxes miss each other are never
+  compared. Anything left in a cycle falls back to a `x0 + y0 + z0` key.
+- **Depth sort, within a group**: a monument is one group, and its pieces used
+  to be drawn in whatever order the archetype happened to declare them — so a
+  tower on the far flank could paint over the ramp in front of it. Every shape
+  now carries a painter's key (its near corner) and groups are sorted by it;
+  the sort is stable, so coincident pieces keep their build order. Decorations
+  (window recesses, inlaid panels) get a small epsilon so they stay on top of
+  their host, and cast shadows get a negative one so they stay under theirs.
+- **Layout** (`world.js`): depth layers advance along `+x` by `SPAN`, siblings
+  fan along `+y` by `LANE`, and each layer gains `RISE` levels. Every monument
+  in a layer shares one footprint and one height — that uniformity is what lets
+  all the paths leaving a layer meet at the same place.
+
+### The three findings that shaped the current geometry
+
+**1. LANE has to be about twice the footprint.** Monuments that touch on screen
+collapse into one unreadable mass however well each one is modelled. Most of
+what read as "a crowded dump of blocks" was simply insufficient sky.
+
+**2. One viaduct per corridor, not one bridge per dependency.** SPAN and RISE
+are locked together by two requirements pulling in opposite directions: the
+world only climbs up-screen when `RISE > SPAN / 2`, while the staircase into the
+next layer only looks like architecture when its slope stays near 1. Solving the
+pair forces a corridor roughly twice the footprint — so a ten-node graph built
+one bridge per edge produced ten full-length viaducts stacked through the same
+gaps, and the world became mostly bridge. Each corridor now carries a single
+shared viaduct: a short spur off each departing deck, one staircase into each
+arriving one. Two further things cut the count again:
+
+- the **transitive reduction** — a DAG usually states a prerequisite twice
+  ("you need A" and "you need B, which needs A"), and building stone for both
+  means a second bridge running the length of the world beside a route that
+  already exists. Only edges with no alternative path get carved. Unlocking
+  still uses the full dependency set; this decides only what is built, and
+  `findPath` routes over the carved edges rather than over every dependency.
+- **landings at every turn**, so a route reads as designed architecture rather
+  than planks meeting in mid-air.
+
+**3. Part of every layer's climb has to happen inside the monument.** This was
+the subtle one. A monument's own footprint contributes eleven cells of run and
+no rise, which flattens everything: at `RISE = 18` the spine climbed 64px per
+layer against 1024px of travel — a 16:1 strip, whatever the buildings looked
+like. Splitting the budget between a stepped ramp through the monument's lane
+and the staircase in the corridor gives two gentle flights instead of one steep
+one, lets `RISE` go half as high again, and takes the world to roughly 1.5:1.
+Walking up through a building is the Monument Valley move anyway.
+
+### Reading at a distance
+
+Detail that is correct up close but dissolves into fuzz when the camera pulls
+back is worse than no detail. Three things were rebuilt on that basis:
+
+- **stairs** use two-cell treads and no side rails (one-cell treads with a
+  stepped rail either side are a sawtooth);
+- **battlements** are two big merlons rather than a fine comb;
+- **colonnades** are four thick columns rather than five slender ones;
+- **accent panels** are inset from the edges of their block, so a rim of stone
+  shows and the colour reads as something set into the stone rather than a
+  painted lid.
+
+Every monument also carries a **parapet** around its deck. That single element
+does more for legibility than anything else: without it the decks of
+neighbouring monuments run together into one pale plane.
 
 ### Known rendering limitations
 
-- **No impossible geometry.** The signature Monument Valley moment — Penrose
-  stairs, rotating/pivoting bridges — is still not implemented. It is now much
-  more tractable than before (there is a real grid and an exact depth sort to
-  build on), and it remains the single biggest "wow" addition available.
-- **No vertical climbing.** Causeways connect decks; the reference also climbs
-  *up* tower faces and spiral stairs.
+- **No impossible geometry.** Penrose stairs and pivoting bridges are still not
+  implemented — deliberately deferred. The grid and the exact depth sort make
+  it tractable, and it remains the biggest "wow" available.
+- **No vertical climbing.** Paths connect decks and ramps; the reference also
+  climbs *up* tower faces and spiral stairs.
 - **The spine is linear.** Layers march along one axis. A switchback layout
-  (alternating `+x` and `-y`) would be more compact and more like a real level,
-  but it complicates causeway routing, which currently assumes one advance axis.
-- **Steep stairs.** Climbing enough to read as an ascent forces ~1.3–1.5 levels
-  per cell. Switchback staircases would let it be both steep and gentle.
+  would be more compact, but it complicates the corridor model, which assumes
+  one advance axis.
+- **Long journeys still stretch.** A sixteen-layer chain reaches about 2.6:1;
+  the composition is only compact for the four-to-six layer graphs the
+  generator usually produces.
 - **Contact shadows are placed by hand** per archetype rather than derived, so a
   new archetype has to remember to cast one.
 
@@ -124,12 +167,19 @@ struggling to get the Monument Valley world I want"). What shipped, and why:
 
 ## 3. Walkability & how the traveller walks
 
-Each causeway stores the centre-line of the stone it draws (`edge.walk`, in grid
-coordinates), including one point per stair tread. Travel is a BFS over the
-undirected graph, then the matching walk polylines are concatenated — reversed
-when travelling against the dependency direction. The walk is parameterised by
-*screen* arc length so the pace looks even whether she is crossing a flat
-causeway or climbing.
+Every piece of path records the centre line of the stone it draws, one point per
+stair tread, and each dependency stitches its own route out of the shared
+pieces: up its own monument's ramp, along the spur, across the viaduct, up the
+staircase, onto the next deck. Travel is a BFS over the **carved** edges — not
+over every dependency, since the transitive reduction means some dependencies
+have no stone under them — and the walk is parameterised by *screen* arc length
+so the pace looks even whether she is crossing a flat viaduct or climbing.
+
+Every consecutive pair of waypoints differs on at most one horizontal axis,
+because the paths are axis-aligned; `assertOnStone` checks that before
+animating and steps her there directly rather than gliding across open sky if it
+ever fails. The geometry test in the repo's notes checks the same invariant, plus
+that every route ends exactly on its target's landing.
 
 One bug worth remembering: `requestAnimationFrame` stops in a backgrounded tab,
 and the walk used to leave `S.walking = true` forever if it never completed —

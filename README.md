@@ -25,16 +25,24 @@ The learning graph (prerequisites → concepts → goal) is the world itself.
   (lid / left / right) with one light source from the left, and never outlined.
 - **Exact occlusion** — drawables are ordered by a topological sort over their
   bounding boxes rather than an approximate depth key, so a causeway never
-  crosses in front of a tower it passes behind.
+  crosses in front of a tower it passes behind, and each monument's own pieces
+  are sorted by a painter's key so nothing paints over what stands in front of
+  it.
 - **8 monument archetypes** built from a Monument Valley vocabulary — plinths,
   ziggurats, colonnades, arches, crenellated keeps, domed pavilions, sunken
   courts, garden terraces — with varied footprints, heights and floating feet,
   so ten monuments never read as ten identical towers.
-- **Real causeways** — every connection is an axis-aligned run of solid steps
-  routed through the corridor between layers. Edges that skip a layer detour
-  behind the world rather than spearing whatever is in the way.
-- **The traveller really walks them** — she follows the staircase geometry that
-  is actually drawn, and the camera tracks her.
+- **One shared viaduct per corridor** — a short spur off each departing deck,
+  one broad railed causeway across the lanes, one staircase into each arriving
+  monument, with a landing at every turn. Only dependencies with no alternative
+  route get built at all, so the world is architecture rather than a lattice of
+  planks. Edges that skip a layer detour behind everything else.
+- **You walk up through the buildings** — each monument's lane is a level
+  landing and then a stepped processional ramp to its exit, which is both the
+  signature Monument Valley move and the thing that makes the world climb
+  instead of sprawling sideways.
+- **The traveller really walks it** — she follows the stone that is actually
+  drawn, staircases and ramps included, and the camera tracks her.
 - **6 chapter palettes** (sandstone, rose, lagoon, lilac, verdigris, ember),
   chosen deterministically from your topic, each with its own sky.
 - **Fork-in-the-road guidance** — when 2+ paths are open, a Monument Valley–style
@@ -109,7 +117,7 @@ Notes:
     ├── iso.js          # the isometric engine: grid -> screen projection, solids, stairs,
     │                   #   arches, domes, colonnades, contact shadows, topological depth sort
     ├── world.js        # layout (layers climb along +x, siblings fan along +y), the eight
-    │                   #   monument archetypes, and causeway routing
+    │                   #   monument archetypes, lane ramps, and corridor routing
     └── app.js          # scene rendering, camera (pan / zoom / pinch / follow), the
                         #   traveller's walk, labels, lessons + checks, save/resume
 ```

@@ -47,10 +47,11 @@ export function bx(g, x, y, z, w, d, h, side = 's', top = side) {
   const t = z + h;
   const A = P(x, y, t), B = P(x + w, y, t), C = P(x + w, y + d, t), D = P(x, y + d, t);
   const b = P(x + w, y, z), c = P(x + w, y + d, z), e = P(x, y + d, z);
+  const k = x + y + z;   // painter's key: the near-side corner of the solid
   g.shapes.push(
-    { cls: `${side}-l`, pts: pts([D, C, c, e]) },  // +y face, screen-left
-    { cls: `${side}-r`, pts: pts([B, C, c, b]) },  // +x face, screen-right
-    { cls: `${top}-t`,  pts: pts([A, B, C, D]) },  // lid
+    { k, cls: `${side}-l`, pts: pts([D, C, c, e]) },  // +y face, screen-left
+    { k, cls: `${side}-r`, pts: pts([B, C, c, b]) },  // +x face, screen-right
+    { k, cls: `${top}-t`,  pts: pts([A, B, C, D]) },  // lid
   );
   grow(g, x, y, z, x + w, y + d, t);
   return g;
@@ -58,17 +59,17 @@ export function bx(g, x, y, z, w, d, h, side = 's', top = side) {
 
 /* A flat inset panel on a box's +x (right) face — windows, doorways, niches. */
 export function faceR(g, X, y0, z0, y1, z1, cls = 'k-r') {
-  g.shapes.push({ cls, pts: pts([P(X, y0, z1), P(X, y1, z1), P(X, y1, z0), P(X, y0, z0)]) });
+  g.shapes.push({ k: X + y0 + z0 + 0.02, cls, pts: pts([P(X, y0, z1), P(X, y1, z1), P(X, y1, z0), P(X, y0, z0)]) });
 }
 
 /* The same on the +y (left) face. */
 export function faceL(g, Y, x0, z0, x1, z1, cls = 'k-l') {
-  g.shapes.push({ cls, pts: pts([P(x0, Y, z1), P(x1, Y, z1), P(x1, Y, z0), P(x0, Y, z0)]) });
+  g.shapes.push({ k: x0 + Y + z0 + 0.02, cls, pts: pts([P(x0, Y, z1), P(x1, Y, z1), P(x1, Y, z0), P(x0, Y, z0)]) });
 }
 
 /* A flat inset panel lying on a horizontal surface — courtyards, gardens, pools. */
 export function faceT(g, Z, x0, y0, x1, y1, cls = 'k-t') {
-  g.shapes.push({ cls, pts: pts([P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)]) });
+  g.shapes.push({ k: x0 + y0 + Z + 0.02, cls, pts: pts([P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)]) });
 }
 
 /* The soft contact shadow a mass casts onto the deck it stands on. One light
@@ -77,6 +78,8 @@ export function faceT(g, Z, x0, y0, x1, y1, cls = 'k-t') {
 export function shade(g, x, y, z, w, d) {
   const ox = 0.55, oy = 0.25;
   g.shapes.push({
+    // just under the mass that casts it, whatever order it was declared in
+    k: x + y + z - 0.4,
     cls: 'sh-t',
     pts: pts([P(x + ox, y + oy, z), P(x + w + ox, y + oy, z), P(x + w + ox, y + d + oy, z), P(x + ox, y + d + oy, z)]),
   });
@@ -87,31 +90,39 @@ export function shade(g, x, y, z, w, d) {
 export function dome(g, cx, cy, z, r, mat = 's') {
   const c = P(cx, cy, z);
   const R = r * TW, ry = r * TH;
+  const k = cx - r + cy - r + z;
   g.shapes.push({
-    cls: `${mat}-t`, tag: 'path',
+    k, cls: `${mat}-t`, tag: 'path',
     d: `M ${c.x - R} ${c.y} A ${R} ${R} 0 0 1 ${c.x + R} ${c.y} A ${R} ${ry} 0 0 1 ${c.x - R} ${c.y} Z`,
   });
   g.shapes.push({
-    cls: `${mat}-r`, tag: 'path',
+    k, cls: `${mat}-r`, tag: 'path',
     d: `M ${c.x} ${c.y - R} A ${R} ${R} 0 0 1 ${c.x + R} ${c.y} A ${R} ${ry} 0 0 1 ${c.x} ${c.y + ry} Z`,
   });
   grow(g, cx - r, cy - r, z, cx + r, cy + r, z + r);
 }
 
-/* Alternating merlons along a top edge — the crenellated parapet silhouette. */
+/* Merlons along a top edge. Two big teeth, not a fine comb: at any distance a
+ * comb dissolves into noise, while a pair of blocks still reads as a
+ * battlement. */
 export function crenels(g, x, y, z, w, d, axis = 'x', mat = 's') {
-  const n = Math.max(2, Math.round(axis === 'x' ? w : d));
-  for (let i = 0; i < n; i += 2) {
-    if (axis === 'x') bx(g, x + i * (w / n), y, z, w / n, d, 0.55, mat);
-    else bx(g, x, y + i * (d / n), z, w, d / n, 0.55, mat);
+  const h = 1.1;
+  if (axis === 'x') {
+    bx(g, x, y, z, w * 0.38, d, h, mat);
+    bx(g, x + w * 0.62, y, z, w * 0.38, d, h, mat);
+  } else {
+    bx(g, x, y, z, w, d * 0.38, h, mat);
+    bx(g, x, y + d * 0.62, z, w, d * 0.38, h, mat);
   }
 }
 
-/* A row of slender columns carrying a lintel slab. */
+/* A row of columns carrying a heavy entablature. Few and thick: five slender
+ * posts read as a comb once the camera pulls back, four solid ones still read
+ * as a colonnade. */
 export function colonnade(g, x, y, z, w, d, h, n, mat = 's', top = 't') {
   const gap = w / n;
-  for (let i = 0; i < n; i++) bx(g, x + i * gap + gap * 0.2, y + d * 0.25, z, gap * 0.6, d * 0.5, h, mat);
-  bx(g, x, y, z + h, w, d, 0.7, mat, top);
+  for (let i = 0; i < n; i++) bx(g, x + i * gap + gap * 0.14, y + d * 0.22, z, gap * 0.72, d * 0.56, h, mat);
+  bx(g, x, y, z + h, w, d, 1.2, mat, top);
 }
 
 /* An ascending run of solid steps. Returns the walkable centre-line points.
@@ -135,6 +146,13 @@ export function stairs(g, x, y, z0, axis, n, width, dz = 1, mat = 't') {
 export function deck(g, x, y, z, w, d, mat = 't', thick = 1.4) {
   bx(g, x, y, z - thick, w, d, thick, mat);
   return [{ x: x + w / 2, y: y + d / 2, z }];
+}
+
+/* A low parapet wall: the raised kerb that turns a slab into a walkway and a
+ * platform into a terrace. Sits ON the surface at `z`, so it never intersects
+ * the slab below it and the depth sort stays acyclic. */
+export function kerb(g, x, y, z, w, d, h = 0.8, mat = 's') {
+  bx(g, x, y, z, w, d, h, mat);
 }
 
 /* --------------------------------------------------------------------------
@@ -167,6 +185,17 @@ function order(a, b) {
   if (a.z1 <= b.z0 + E) return -1;
   if (b.z1 <= a.z0 + E) return 1;
   return 0;
+}
+
+/* Painter's order WITHIN one group. The groups themselves are ordered exactly,
+ * but a monument is a single group and its own pieces were previously drawn in
+ * whatever order the archetype happened to declare them — so a tower on the far
+ * flank could paint over the ramp in front of it. Sorting by each solid's near
+ * corner fixes that; the sort is stable, so coincident pieces keep the order
+ * they were built in. */
+export function sortShapes(g) {
+  g.shapes.sort((a, b) => (a.k ?? 0) - (b.k ?? 0));
+  return g;
 }
 
 export function depthSort(groups) {
