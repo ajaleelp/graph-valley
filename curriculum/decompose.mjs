@@ -41,6 +41,11 @@ ${shape}
 Work BACKWARDS from the goal. List only what that goal actually needs — nothing
 a learner could reach the goal without.
 
+The goal is pitched at "${goal.level || 'apply'}", so the components the capstone
+leans on must reach "${goal.level || 'apply'}" too. Earlier components may sit
+lower, but a course of nothing but "understand" does not arrive at an "analyze"
+goal. Set each component's "level" to what that component actually demands.
+
 {"spine": "${spine}",
  "assumed": ["what a general adult audience already has — these are not taught"],
  "kcs": [{"id": "k1",
@@ -50,18 +55,22 @@ a learner could reach the goal without.
           "level": "remember|understand|apply|analyze|evaluate|create",
           "requires": ["ids of components needed before this one"],
           "misconceptions": ["what people actually get wrong about this, 2-3 of them"],
-          "check": {"kc": "k1", "level": "understand", "kind": "mcq",
+          "check": {"level": "understand",
                     "stem": "a question answerable only if you hold this component",
-                    "options": ["...", "...", "...", "..."], "answerIndex": 0,
-                    "distractorSource": [null, "the misconception each wrong option embodies", "...", "..."]}}],
+                    "correct": "the right answer",
+                    "wrong": [{"text": "a wrong answer", "because": "the misconception it embodies, quoted from this component's list"},
+                              {"text": "...", "because": "..."},
+                              {"text": "...", "because": "..."}]}}],
  "clusters": [{"title": "2-5 words, concrete", "summary": "one sentence", "kcs": ["k1"]}],
  "capstoneRequires": ["ids of the components the capstone task actually exercises"]}
 
 Rules:
 - 6 to 16 components. "requires" must form a DAG. Every component must be
   something the goal genuinely needs.
-- Every wrong option in a check must come from one of that component's own
-  named misconceptions, quoted exactly. The correct option's slot is null.
+- Give exactly three "wrong" options. Each carries, right beside it, the
+  misconception it embodies — quoted from that same component's list. Two wrong
+  options may embody the same misconception. Do not order or number them; where
+  the right answer sits is decided afterwards.
 - Clusters partition the components: every id appears in exactly one cluster.
 - "capstoneRequires" names the components the capstone leans on directly. Every
   other component must be reachable from those through "requires" — anything
@@ -86,6 +95,59 @@ function extractJson(text) {
 const str = (v, fallback = '') => (typeof v === 'string' ? v : fallback);
 const arr = (v) => (Array.isArray(v) ? v : []);
 
+/* Where the right answer sits is ours to decide, not the model's: every check
+ * in the first live run came back with answerIndex 0, which makes the whole
+ * thing guessable without reading the question. Deterministic in the atom's id
+ * so a re-run produces the same paper. */
+function seatFrom(id) {
+  let h = 0;
+  for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+}
+
+/* The model writes each wrong option next to the misconception it embodies.
+ * A parallel array of indices asked it to hold positional correspondence
+ * across two lists, and it numbered the options instead — every time. */
+function readCheck(raw, kc) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const wrong = arr(raw.wrong)
+    .map((w) => ({ text: str(w?.text).trim(), because: str(w?.because).trim() }))
+    .filter((w) => w.text);
+
+  // Already in the flat form (an older fixture, or a model that ignored us).
+  if (!wrong.length) {
+    return arr(raw.options).length ? { ...raw, kc: kc.id } : null;
+  }
+
+  const correct = str(raw.correct).trim();
+  if (!correct) return null;
+
+  // Wrong options in the order given, with the right answer slotted in at a
+  // seat derived from the atom's id.
+  const seat = seatFrom(kc.id) % (wrong.length + 1);
+  const options = wrong.map((w) => w.text);
+  const distractorSource = wrong.map((w) => (kc.misconceptions.includes(w.because) ? w.because : null));
+
+  options.splice(seat, 0, correct);
+  distractorSource.splice(seat, 0, null);
+
+  // The atom's level is the claim about what it teaches; a check cannot ask
+  // for more than that. Models set the two independently and inconsistently.
+  const asked = LEVELS.includes(raw.level) ? raw.level : kc.level;
+  const level = LEVELS.indexOf(asked) > LEVELS.indexOf(kc.level) ? kc.level : asked;
+
+  return {
+    answerIndex: seat,
+    kc: kc.id,
+    level,
+    kind: 'mcq',
+    stem: str(raw.stem),
+    options,
+    distractorSource,
+  };
+}
+
 export async function decompose({ topic, goal, capstone, spine = 'concept', llm, complaints = [] }) {
   const raw = await llm(
     DECOMPOSE_SYSTEM,
@@ -107,8 +169,12 @@ export async function decompose({ topic, goal, capstone, spine = 'concept', llm,
       level: LEVELS.includes(k.level) ? k.level : 'understand',
       requires: arr(k.requires).map(String),
       misconceptions: arr(k.misconceptions).map(String),
-      check: k.check && typeof k.check === 'object' ? { ...k.check, kc: String(k.id) } : null,
+      check: null,
     }));
+
+  // Checks are read after the atom exists, so a wrong option can be matched
+  // against that atom's own misconceptions.
+  kcs.forEach((k, i) => { k.check = readCheck(body.kcs[i]?.check, k); });
 
   const ids = new Set(kcs.map((k) => k.id));
   for (const k of kcs) {

@@ -104,3 +104,86 @@ test('asks for enough tokens to fit a full decomposition', async () => {
   // A 13-atom decomposition with a check per atom runs past 3,000 tokens.
   assert.ok(budget >= 6000, `asked for only ${budget} tokens; a real decomposition truncates`);
 });
+
+test('tells the model what level the course has to reach', async () => {
+  const { decomposePrompt } = await import('./decompose.mjs');
+  const p = decomposePrompt({
+    topic: 'x',
+    goal: { statement: 'analyse the thing', level: 'analyze' },
+    capstone: { prompt: 'prove it' },
+  });
+  // Not just present in the level enum — stated as something the course must
+  // reach. Live runs flattened every atom to "understand" against an "analyze"
+  // goal, and the prompt never said otherwise.
+  assert.match(p, /must reach "analyze"/, 'the goal level must be stated as a requirement');
+});
+
+/* --- the check shape the model is actually asked for ------------------- */
+
+const CO_LOCATED = JSON.stringify({
+  spine: 'concept', assumed: [], capstoneRequires: ['k1'],
+  kcs: [{
+    id: 'k1', label: 'a thing', type: 'concept', cluster: 'One', level: 'understand', requires: [],
+    misconceptions: ['people think it is X', 'people think it is Y'],
+    check: {
+      kc: 'k1', level: 'understand', kind: 'mcq', stem: 'which is true?',
+      correct: 'the right answer',
+      wrong: [
+        { text: 'it is X', because: 'people think it is X' },
+        { text: 'it is Y', because: 'people think it is Y' },
+        { text: 'it is X, sort of', because: 'people think it is X' },
+      ],
+    },
+  }],
+  clusters: [{ title: 'One', summary: 's', kcs: ['k1'] }],
+});
+
+const readCheck = async () => {
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm: saying(CO_LOCATED) });
+  return spec.kcs[0].check;
+};
+
+test('builds a four-option check from the correct answer and the wrong ones', async () => {
+  const c = await readCheck();
+  assert.equal(c.options.length, 4);
+  assert.equal(c.options[c.answerIndex], 'the right answer');
+});
+
+test('points every wrong option at the misconception written beside it', async () => {
+  const c = await readCheck();
+  c.options.forEach((text, i) => {
+    if (i === c.answerIndex) return assert.equal(c.distractorSource[i], null);
+    const named = ['people think it is X', 'people think it is Y'];
+    assert.ok(named.includes(c.distractorSource[i]), `option "${text}" lost its misconception`);
+  });
+});
+
+test('does not leave the correct answer in the same place every time', async () => {
+  // Every live check came back with answerIndex 0, which makes the whole thing
+  // guessable without reading. Position is ours to decide, not the model's.
+  const seen = new Set();
+  for (const id of ['k1', 'k2', 'k3', 'k4', 'k5', 'k6']) {
+    const body = JSON.parse(CO_LOCATED);
+    body.kcs[0].id = id; body.kcs[0].check.kc = id;
+    body.clusters[0].kcs = [id]; body.capstoneRequires = [id];
+    const spec = await decompose({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm: saying(JSON.stringify(body)) });
+    seen.add(spec.kcs[0].check.answerIndex);
+  }
+  assert.ok(seen.size > 1, `the answer sat at index ${[...seen]} every time`);
+});
+
+test('still accepts a check already written as options and an answer index', async () => {
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm: saying(RESPONSE) });
+  assert.equal(spec.kcs[0].check.options.length, 4);
+  assert.equal(spec.kcs[0].check.answerIndex, 0);
+});
+
+test('never lets a check ask for more than its atom claims to teach', async () => {
+  // Live: the model set an atom to "remember" and its check to "understand".
+  // The atom's level is the claim; the check cannot outrun it.
+  const body = JSON.parse(CO_LOCATED);
+  body.kcs[0].level = 'remember';
+  body.kcs[0].check.level = 'analyze';
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm: saying(JSON.stringify(body)) });
+  assert.equal(spec.kcs[0].check.level, 'remember');
+});

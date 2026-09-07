@@ -127,13 +127,25 @@ that's a quality signal no single assertion catches.
 
 ## What isn't built yet
 
-**The curriculum has never met a real API.** Two of the five fixtures
-(`transformers`, `sourdough`) were written cold from the prompts, without sight
-of the validator — the closest thing here to a real run, and enough to shake out
-three genuine bugs. The other three were authored knowing what the validator
-wanted, which makes them weaker evidence. `node curriculum/check.mjs --live`
-calls a real model and re-records; nobody has run it. The structure holds up;
-how a model in the wild fills it is still untested.
+**`gpt-4o-mini` is not up to writing the curriculum.** Three live runs, and it
+never once produced a syllabus the validator would accept across all five
+topics. Asked for 6–16 atoms it returned three or four; asked for concrete
+cluster titles it returned "Economic Factors, Political Factors, Ideological
+Factors"; asked to vary Bloom levels it flattened everything to "understand".
+The checks it wrote put the correct answer at option A every single time.
+
+That is not all the model's fault, and the runs were worth their cost — they
+found four faults on our side, since fixed: a parallel `distractorSource` array
+that asked the model to hold positional correspondence across two lists (it
+numbered the options instead, every time), no instruction that the course must
+reach the goal's own level, no clamp stopping a check outrunning the atom it
+tests, and nothing at all enforcing the atom count the prompt asks for.
+
+**Whether a stronger model clears the bar is still unknown**, and it is the next
+thing to find out. The committed fixtures are hand-authored; `--live` re-records
+them from a real model. What the validator does is settled — it rejected every
+bad decomposition and no learner ever saw one. What a model in the wild produces
+is not.
 
 **No adaptation.** Everyone still gets the same valley. The schema is built for
 it — `pack()` already takes a set of atoms the learner holds and re-derives a

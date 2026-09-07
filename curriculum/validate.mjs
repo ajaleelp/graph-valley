@@ -59,6 +59,16 @@ export function validate(doc) {
     if (!needed.has(k)) fail('kc-unused', `${owner} teaches ${k}, which the capstone never needs`, k);
   }
 
+  // A handful of atoms is a definition list, not a course. Weaker models
+  // routinely return three against a prompt asking for six to sixteen.
+  // Off unless the document says otherwise, so a hand-built two-atom fixture
+  // can exercise one rule without satisfying all of them. `assemble` sets it
+  // on everything the pipeline produces.
+  const minKcs = doc.minKcs ?? 0;
+  if (doc.kcs.length < minKcs) {
+    fail('too-few-atoms', `${doc.kcs.length} components is too thin for a course; expected at least ${minKcs}`);
+  }
+
   // Cognitive load: a platform may only introduce so much at once.
   const budget = doc.budget?.newKcs ?? 3;
   for (const n of doc.nodes) {
@@ -105,11 +115,17 @@ export function validate(doc) {
       }
       if (c.kind !== 'mcq') continue;
 
-      const named = new Set(byKc.get(c.kc)?.misconceptions || []);
+      // A distractor may name its misconception either by quoting it or by
+      // index. Asking a model to reproduce a string exactly in a second place
+      // was the commonest live failure, and an index says the same thing.
+      const named = byKc.get(c.kc)?.misconceptions || [];
       c.options.forEach((_, i) => {
         if (i === c.answerIndex) return;
         const src = c.distractorSource?.[i];
-        if (!src || !named.has(src)) {
+        const ok = Number.isInteger(src)
+          ? src >= 0 && src < named.length
+          : typeof src === 'string' && named.includes(src);
+        if (!ok) {
           fail('distractor-unsourced', `option ${i} of the ${c.kc} check is not drawn from a named misconception`, c.kc);
         }
       });

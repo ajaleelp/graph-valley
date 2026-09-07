@@ -192,3 +192,35 @@ test('rejects a syllabus without exactly one summit', () => {
 test('rejects a capstone that names no atoms, rather than throwing', () => {
   failsWith(syllabus({ capstone: { prompt: 'now do it', rubric: [] } }), 'capstone-empty');
 });
+
+test('accepts a distractor referenced by the misconception it points at', () => {
+  // Quoting a string exactly in two places is a hard thing to ask a model for,
+  // and it was the single commonest live failure. An index is trivial to emit
+  // and exactly as checkable.
+  const r = validate(syllabus({
+    nodes: [
+      node('n1', { teaches: ['k1'] }, { checks: [check('k1', 'understand', { distractorSource: [null, 0, 0, 0] })] }),
+      node('n2', { teaches: ['k2'], requires: ['k1'], level: 'apply', goal: true }),
+    ],
+  }));
+  assert.deepEqual(r.errors.filter((e) => e.code === 'distractor-unsourced'), []);
+});
+
+test('rejects a distractor index pointing past the named misconceptions', () => {
+  failsWith(
+    syllabus({
+      nodes: [
+        node('n1', { teaches: ['k1'] }, { checks: [check('k1', 'understand', { distractorSource: [null, 7, 0, 0] })] }),
+        node('n2', { teaches: ['k2'], requires: ['k1'], level: 'apply', goal: true }),
+      ],
+    }),
+    'distractor-unsourced',
+  );
+});
+
+test('rejects a decomposition too thin to be a course', () => {
+  // The prompt asks for 6 to 16 atoms; nothing enforced it, and weaker models
+  // routinely returned three. A definition list is not a syllabus.
+  const kcs = [kc('k1'), kc('k2', ['k1'])];
+  failsWith(syllabus({ kcs, minKcs: 6 }), 'too-few-atoms');
+});

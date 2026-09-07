@@ -15,170 +15,502 @@
       "does not treat the model as a lookup table"
     ],
     "requires": [
-      "k1",
-      "k3"
+      "k3",
+      "k13"
     ]
   },
   "response": {
     "spine": "concept",
-    "assumed": [],
+    "assumed": [
+      "what a function is",
+      "what an array of numbers is",
+      "basic programming"
+    ],
     "kcs": [
       {
         "id": "k1",
-        "label": "A transformer processes input tokens in stages: embedding, self-attention, feed-forward, and output.",
-        "type": "concept",
-        "cluster": "Transformer Mechanics",
-        "level": "understand",
+        "label": "A token is a chunk of text — often a word-piece — mapped to an integer id",
+        "type": "fact",
+        "cluster": "From word to vector",
+        "level": "remember",
         "requires": [],
         "misconceptions": [
-          "Transformers operate like traditional recurrent neural networks.",
-          "Self-attention only focuses on nearby words.",
-          "Feed-forward networks alone can capture long-range dependencies between words."
+          "a token is always a whole word",
+          "tokens are individual characters"
         ],
         "check": {
           "kc": "k1",
-          "level": "understand",
+          "level": "remember",
           "kind": "mcq",
-          "stem": "What happens during the self-attention stage of a transformer?",
+          "stem": "How is \"unbelievable\" most likely handled by a tokenizer?",
           "options": [
-            null,
-            "It only considers the last word.",
-            "It processes words in isolation.",
-            "It replaces the input sequence with random values."
+            "split into a few word-pieces, each with its own id",
+            "kept as one whole word with one id",
+            "split into individual letters",
+            "looked up in a dictionary of English words"
           ],
           "answerIndex": 0,
           "distractorSource": [
             null,
-            "Transformers operate like traditional recurrent neural networks.",
-            "Self-attention only focuses on nearby words.",
-            "Feed-forward networks alone can capture long-range dependencies between words."
+            "a token is always a whole word",
+            "tokens are individual characters",
+            "a token is always a whole word"
           ]
         }
       },
       {
         "id": "k2",
-        "label": "Self-attention computes a weighted representation of input tokens based on their relationships.",
+        "label": "An embedding turns a token id into a vector of numbers",
         "type": "concept",
-        "cluster": "Attention Mechanism",
+        "cluster": "From word to vector",
         "level": "understand",
         "requires": [
           "k1"
         ],
         "misconceptions": [
-          "Self-attention gives equal importance to all words.",
-          "Attention weights are static and do not change during training.",
-          "Self-attention cannot enhance contextual understanding."
+          "the vector stores the word's letters",
+          "the embedding is looked up from a fixed dictionary rather than learned"
         ],
         "check": {
           "kc": "k2",
           "level": "understand",
           "kind": "mcq",
-          "stem": "What does self-attention do with the input tokens?",
+          "stem": "What does the embedding layer produce for a token id?",
           "options": [
-            null,
-            "It ignores context.",
-            "It assigns equal weights to all tokens.",
-            "It operates at a fixed layer only."
+            "a vector of numbers, learned during training",
+            "the word's letters encoded as numbers",
+            "a fixed vector from a standard published dictionary",
+            "a single number ranking the word's frequency"
           ],
           "answerIndex": 0,
           "distractorSource": [
             null,
-            "Self-attention gives equal importance to all words.",
-            "Attention weights are static and do not change during training.",
-            "Self-attention cannot enhance contextual understanding."
+            "the vector stores the word's letters",
+            "the embedding is looked up from a fixed dictionary rather than learned",
+            "the vector stores the word's letters"
           ]
         }
       },
       {
         "id": "k3",
-        "label": "Attention enables the model to focus on relevant parts of the input sequence based on the target token's context.",
+        "label": "Vectors sit in a learned space where nearby means used alike",
         "type": "concept",
-        "cluster": "Attention Mechanism",
+        "cluster": "From word to vector",
         "level": "understand",
         "requires": [
           "k2"
         ],
         "misconceptions": [
-          "Attention works the same as simple aggregation of inputs.",
-          "The mechanism only benefits long inputs.",
-          "It cannot replace other neural network types."
+          "the dimensions have human-readable meanings",
+          "the space was designed by hand rather than learned from data"
         ],
         "check": {
           "kc": "k3",
           "level": "understand",
           "kind": "mcq",
-          "stem": "Why is attention significant in transformers?",
+          "stem": "\"King\" and \"queen\" end up close together because…",
           "options": [
-            null,
-            "It provides a deterministic output.",
-            "It reduces model complexity.",
-            "It allows context-sensitive weighting."
+            "they are used in similar contexts",
+            "one dimension literally encodes royalty",
+            "someone chose to place related words near each other",
+            "one dimension encodes gender and another rank"
           ],
           "answerIndex": 0,
           "distractorSource": [
             null,
-            "Attention works the same as simple aggregation of inputs.",
-            "The mechanism only benefits long inputs.",
-            "It cannot replace other neural network types."
+            "the dimensions have human-readable meanings",
+            "the space was designed by hand rather than learned from data",
+            "the dimensions have human-readable meanings"
           ]
         }
       },
       {
         "id": "k4",
-        "label": "Each stage (embedding, self-attention, feed-forward) transforms the token representation to maintain or enhance semantic meaning.",
-        "type": "concept",
-        "cluster": "Transformer Mechanics",
+        "label": "Attention has no sense of order, so position must be written into the vector",
+        "type": "principle",
+        "cluster": "Where order comes from",
         "level": "understand",
         "requires": [
-          "k1"
+          "k2"
         ],
         "misconceptions": [
-          "Transformations do not change token meaning.",
-          "Only the output layer matters for predictions.",
-          "Pre-trained models do not utilize embeddings effectively."
+          "the model reads left to right like a person",
+          "order is preserved automatically because the input is a list"
         ],
         "check": {
           "kc": "k4",
           "level": "understand",
           "kind": "mcq",
-          "stem": "What is the purpose of transformations in a transformer?",
+          "stem": "Why must position be added to the vectors at all?",
           "options": [
-            null,
-            "To maintain semantic context.",
-            "To compress all input to a single value.",
-            "To eliminate the need for context."
+            "attention alone would treat a shuffled sentence identically",
+            "the model would otherwise read the sentence backwards",
+            "it makes the model faster",
+            "it stops words repeating"
           ],
           "answerIndex": 0,
           "distractorSource": [
             null,
-            "Transformations do not change token meaning.",
-            "Only the output layer matters for predictions.",
-            "Pre-trained models do not utilize embeddings effectively."
+            "the model reads left to right like a person",
+            "order is preserved automatically because the input is a list",
+            "order is preserved automatically because the input is a list"
+          ]
+        }
+      },
+      {
+        "id": "k5",
+        "label": "Each position turns its vector into a query, a key and a value",
+        "type": "procedure",
+        "cluster": "How attention mixes",
+        "level": "understand",
+        "requires": [
+          "k2"
+        ],
+        "misconceptions": [
+          "query, key and value are three different words' vectors",
+          "they are stored lookups rather than computed each time"
+        ],
+        "check": {
+          "kc": "k5",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "Where do a position's query, key and value come from?",
+          "options": [
+            "all three are computed from that position's own vector",
+            "from three neighbouring words",
+            "from a table stored during training",
+            "the query is the word, the key is the sentence"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "query, key and value are three different words' vectors",
+            "they are stored lookups rather than computed each time",
+            "query, key and value are three different words' vectors"
+          ]
+        }
+      },
+      {
+        "id": "k6",
+        "label": "Every query is scored against every key, and the scores become weights summing to one",
+        "type": "procedure",
+        "cluster": "How attention mixes",
+        "level": "apply",
+        "requires": [
+          "k5"
+        ],
+        "misconceptions": [
+          "only the highest-scoring position is used",
+          "the scores are the final output rather than weights"
+        ],
+        "check": {
+          "kc": "k6",
+          "level": "apply",
+          "kind": "mcq",
+          "stem": "After scoring, what happens to the scores?",
+          "options": [
+            "they are turned into weights across all positions that add to one",
+            "the single best position is picked and the rest discarded",
+            "they are passed on as the layer's output",
+            "they are averaged into one number"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "only the highest-scoring position is used",
+            "the scores are the final output rather than weights",
+            "only the highest-scoring position is used"
+          ]
+        }
+      },
+      {
+        "id": "k7",
+        "label": "A position's output is the weighted sum of every position's value",
+        "type": "principle",
+        "cluster": "How attention mixes",
+        "level": "apply",
+        "requires": [
+          "k6"
+        ],
+        "misconceptions": [
+          "the position copies the winning word's vector",
+          "the output replaces information from other positions rather than blending it"
+        ],
+        "check": {
+          "kc": "k7",
+          "level": "apply",
+          "kind": "mcq",
+          "stem": "What does a position hold after one attention step?",
+          "options": [
+            "a blend of all positions' values, weighted by relevance",
+            "a copy of the most relevant word's vector",
+            "its own vector, unchanged",
+            "the average of every word in the sentence"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "the position copies the winning word's vector",
+            "the output replaces information from other positions rather than blending it",
+            "the position copies the winning word's vector"
+          ]
+        }
+      },
+      {
+        "id": "k8",
+        "label": "The per-position MLP transforms each vector alone, mixing nothing between positions",
+        "type": "concept",
+        "cluster": "Why attention matters",
+        "level": "understand",
+        "requires": [
+          "k2"
+        ],
+        "misconceptions": [
+          "the MLP also lets positions see each other",
+          "the MLP is where the sentence is understood"
+        ],
+        "check": {
+          "kc": "k8",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What can the per-position MLP see?",
+          "options": [
+            "only its own position's vector",
+            "every position in the sentence",
+            "the two neighbouring positions",
+            "the original text"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "the MLP also lets positions see each other",
+            "the MLP also lets positions see each other",
+            "the MLP is where the sentence is understood"
+          ]
+        }
+      },
+      {
+        "id": "k9",
+        "label": "Attention is the only place one position reads another — that is what a plain feed-forward net cannot do",
+        "type": "principle",
+        "cluster": "Why attention matters",
+        "level": "analyze",
+        "requires": [
+          "k7",
+          "k4",
+          "k8"
+        ],
+        "misconceptions": [
+          "a deep enough feed-forward network could do the same",
+          "attention is mainly a speed optimisation"
+        ],
+        "check": {
+          "kc": "k9",
+          "level": "analyze",
+          "kind": "mcq",
+          "stem": "Why can't a stack of per-position MLPs replace attention?",
+          "options": [
+            "no position could ever read another's content",
+            "it would be too slow to train",
+            "it would use more memory",
+            "it could, with enough layers"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "attention is mainly a speed optimisation",
+            "attention is mainly a speed optimisation",
+            "a deep enough feed-forward network could do the same"
+          ]
+        }
+      },
+      {
+        "id": "k10",
+        "label": "Each block adds its result back onto the vector instead of replacing it",
+        "type": "principle",
+        "cluster": "The running vector",
+        "level": "understand",
+        "requires": [
+          "k9"
+        ],
+        "misconceptions": [
+          "each layer overwrites the previous one's output",
+          "the residual connection is only a training trick with no effect on meaning"
+        ],
+        "check": {
+          "kc": "k10",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What happens to a position's vector as it passes through a block?",
+          "options": [
+            "the block's output is added to what was already there",
+            "it is replaced by the block's output",
+            "it is reset before each block",
+            "it is averaged with the block's output"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "each layer overwrites the previous one's output",
+            "each layer overwrites the previous one's output",
+            "the residual connection is only a training trick with no effect on meaning"
+          ]
+        }
+      },
+      {
+        "id": "k11",
+        "label": "Blocks stack, so a late layer reads a vector many earlier blocks have written to",
+        "type": "concept",
+        "cluster": "The running vector",
+        "level": "understand",
+        "requires": [
+          "k10"
+        ],
+        "misconceptions": [
+          "each layer starts fresh from the embedding",
+          "later layers see only the layer immediately before"
+        ],
+        "check": {
+          "kc": "k11",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What does layer 20 read?",
+          "options": [
+            "the accumulated vector every earlier block has added to",
+            "only layer 19's output",
+            "the original embedding again",
+            "the raw token id"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "later layers see only the layer immediately before",
+            "each layer starts fresh from the embedding",
+            "each layer starts fresh from the embedding"
+          ]
+        }
+      },
+      {
+        "id": "k12",
+        "label": "The final vector is scored against every word in the vocabulary to pick the next one",
+        "type": "procedure",
+        "cluster": "From vector to next word",
+        "level": "apply",
+        "requires": [
+          "k11"
+        ],
+        "misconceptions": [
+          "the model outputs a word directly",
+          "it retrieves a stored continuation it saw in training"
+        ],
+        "check": {
+          "kc": "k12",
+          "level": "apply",
+          "kind": "mcq",
+          "stem": "What does the model actually output at the end?",
+          "options": [
+            "a score for every word in the vocabulary",
+            "the next word as text",
+            "a sentence it memorised",
+            "the vector itself"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "the model outputs a word directly",
+            "it retrieves a stored continuation it saw in training",
+            "the model outputs a word directly"
+          ]
+        }
+      },
+      {
+        "id": "k13",
+        "label": "Weights are learned once and fixed; the vectors are computed fresh for every input",
+        "type": "principle",
+        "cluster": "From vector to next word",
+        "level": "analyze",
+        "requires": [
+          "k12"
+        ],
+        "misconceptions": [
+          "the model learns while you talk to it",
+          "the activations are stored somewhere between requests"
+        ],
+        "check": {
+          "kc": "k13",
+          "level": "analyze",
+          "kind": "mcq",
+          "stem": "You send the same prompt twice. What is reused?",
+          "options": [
+            "the weights; the vectors are recomputed from scratch",
+            "both weights and vectors, from a cache",
+            "nothing — it relearns each time",
+            "the vectors; the weights are recomputed"
+          ],
+          "answerIndex": 0,
+          "distractorSource": [
+            null,
+            "the activations are stored somewhere between requests",
+            "the model learns while you talk to it",
+            "the model learns while you talk to it"
           ]
         }
       }
     ],
     "clusters": [
       {
-        "title": "Transformer Mechanics",
-        "summary": "Understanding the structural flow and transformations within a transformer model.",
+        "title": "From word to vector",
+        "summary": "How a piece of text becomes numbers the model can work on.",
         "kcs": [
           "k1",
+          "k2",
+          "k3"
+        ]
+      },
+      {
+        "title": "Where order comes from",
+        "summary": "Why word order has to be written in by hand.",
+        "kcs": [
           "k4"
         ]
       },
       {
-        "title": "Attention Mechanism",
-        "summary": "Grasping the role and functioning of the attention mechanism in analysis.",
+        "title": "How attention mixes",
+        "summary": "The three vectors, the scores, and the weighted blend.",
         "kcs": [
-          "k2",
-          "k3"
+          "k5",
+          "k6",
+          "k7"
+        ]
+      },
+      {
+        "title": "Why attention matters",
+        "summary": "The one thing attention does that nothing else in the model can.",
+        "kcs": [
+          "k8",
+          "k9"
+        ]
+      },
+      {
+        "title": "The running vector",
+        "summary": "Why blocks add rather than replace, and what stacking buys.",
+        "kcs": [
+          "k10",
+          "k11"
+        ]
+      },
+      {
+        "title": "From vector to next word",
+        "summary": "Turning the final vector into a prediction, and what is fixed versus computed.",
+        "kcs": [
+          "k12",
+          "k13"
         ]
       }
     ],
     "capstoneRequires": [
-      "k1",
-      "k3"
+      "k3",
+      "k13"
     ]
   }
 }

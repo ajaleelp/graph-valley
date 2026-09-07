@@ -7,266 +7,117 @@
   },
   "capstone": {
     "prompt": "Walk into a café, greet the staff, say who you are, order two of something, ask the price, ask them to repeat it, and leave politely.",
-    "rubric": [
-      "stays in Japanese throughout",
-      "uses a counter correctly",
-      "recovers when the reply is too fast"
-    ],
-    "requires": [
-      "k1",
-      "k2",
-      "k3",
-      "k4",
-      "k5",
-      "k6"
-    ]
+    "rubric": ["stays in Japanese throughout", "uses a counter correctly", "recovers when the reply is too fast"],
+    "requires": ["j8"]
   },
   "response": {
     "spine": "task",
-    "assumed": [],
+    "assumed": ["reading romaji", "that Japanese has politeness levels"],
     "kcs": [
       {
-        "id": "k1",
-        "label": "Greet the café staff in Japanese.",
-        "type": "procedure",
-        "cluster": "greeting",
-        "level": "apply",
-        "requires": [],
-        "misconceptions": [
-          "Using casual greetings instead of polite ones.",
-          "Not adjusting greeting based on the time of day."
-        ],
+        "id": "j1", "label": "Greet someone appropriately for the time of day",
+        "type": "procedure", "cluster": "Say hello and who you are", "level": "apply", "requires": [],
+        "misconceptions": ["konnichiwa works at any hour", "a greeting always needs a deep bow"],
         "check": {
-          "kc": "k1",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "What is an appropriate greeting for a café staff member in the morning?",
-          "options": [
-            "おはようございます",
-            "こんにちは",
-            "こんばんは",
-            "失礼します"
-          ],
+          "kc": "j1", "level": "apply", "kind": "mcq",
+          "stem": "You enter a café at 8am. What do you say?",
+          "options": ["ohayou gozaimasu", "konnichiwa — it covers the whole day", "konbanwa", "sayounara"],
           "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "Using casual greetings instead of polite ones.",
-            "Not adjusting greeting based on the time of day.",
-            null
-          ]
+          "distractorSource": [null, "konnichiwa works at any hour", "konnichiwa works at any hour", "a greeting always needs a deep bow"]
         }
       },
       {
-        "id": "k2",
-        "label": "Say your name in Japanese.",
-        "type": "procedure",
-        "cluster": "introducing",
-        "level": "apply",
-        "requires": [
-          "k1"
-        ],
-        "misconceptions": [
-          "Not using the polite form.",
-          "Incorrectly stating your name."
-        ],
+        "id": "j2", "label": "Say your own name and where you are from",
+        "type": "procedure", "cluster": "Say hello and who you are", "level": "apply", "requires": ["j1"],
+        "misconceptions": ["you add -san to your own name", "the family name comes second, as in English"],
         "check": {
-          "kc": "k2",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "How do you politely introduce yourself in Japanese?",
-          "options": [
-            "私は田中です",
-            "田中です",
-            "私の名前は田中です",
-            "田中と申します"
-          ],
-          "answerIndex": 3,
-          "distractorSource": [
-            null,
-            "Not using the polite form.",
-            "Incorrectly stating your name.",
-            null
-          ]
+          "kc": "j2", "level": "apply", "kind": "mcq",
+          "stem": "Introducing yourself, which is right?",
+          "options": ["Tanaka desu", "Tanaka-san desu", "Watashi wa Tanaka-san", "Desu Tanaka"],
+          "answerIndex": 0,
+          "distractorSource": [null, "you add -san to your own name", "you add -san to your own name", "the family name comes second, as in English"]
         }
       },
       {
-        "id": "k3",
-        "label": "Order two of something in Japanese.",
-        "type": "procedure",
-        "cluster": "ordering",
-        "level": "apply",
-        "requires": [
-          "k2"
-        ],
-        "misconceptions": [
-          "Forgetting to specify the item when ordering.",
-          "Using the wrong quantity word."
-        ],
+        "id": "j3", "label": "Count one to ten and pick the right counter for objects",
+        "type": "fact", "cluster": "Ask for a thing", "level": "remember", "requires": [],
+        "misconceptions": ["one set of numbers works for everything", "counters are optional in speech"],
         "check": {
-          "kc": "k3",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "How do you order two coffees in Japanese?",
-          "options": [
-            "コーヒー二つください",
-            "二つのコーヒー",
-            "コーヒー二人分",
-            "二杯のコーヒー"
-          ],
+          "kc": "j3", "level": "remember", "kind": "mcq",
+          "stem": "Ordering two coffees, which counter fits?",
+          "options": ["futatsu", "ni — plain numbers always work", "nihon", "no counter is needed"],
           "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "Forgetting to specify the item when ordering.",
-            "Using the wrong quantity word.",
-            null
-          ]
+          "distractorSource": [null, "one set of numbers works for everything", "one set of numbers works for everything", "counters are optional in speech"]
         }
       },
       {
-        "id": "k4",
-        "label": "Ask for the price in Japanese.",
-        "type": "procedure",
-        "cluster": "inquiring",
-        "level": "apply",
-        "requires": [
-          "k3"
-        ],
-        "misconceptions": [
-          "Using informal ways to ask about price.",
-          "Asking for price without context."
-        ],
+        "id": "j4", "label": "Ask for a specific thing, by pointing and by name",
+        "type": "procedure", "cluster": "Ask for a thing", "level": "apply", "requires": ["j1", "j3"],
+        "misconceptions": ["kudasai can be dropped when pointing", "kore and sore mean the same thing"],
         "check": {
-          "kc": "k4",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "How do you politely ask for the price in Japanese?",
-          "options": [
-            "いくらですか",
-            "安いですか",
-            "どのくらい",
-            "値段は何ですか"
-          ],
+          "kc": "j4", "level": "apply", "kind": "mcq",
+          "stem": "Pointing at a cake in the case, you say…",
+          "options": ["kore o kudasai", "kore", "sore o kudasai — it is the same word", "kudasai kore"],
           "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "Using informal ways to ask about price.",
-            "Asking for price without context.",
-            null
-          ]
+          "distractorSource": [null, "kudasai can be dropped when pointing", "kore and sore mean the same thing", "kudasai can be dropped when pointing"]
         }
       },
       {
-        "id": "k5",
-        "label": "Ask to repeat the price in Japanese.",
-        "type": "procedure",
-        "cluster": "inquiring",
-        "level": "apply",
-        "requires": [
-          "k4"
-        ],
-        "misconceptions": [
-          "Not using polite structures.",
-          "Misunderstanding how to request repetition."
-        ],
+        "id": "j5", "label": "Accept and refuse politely",
+        "type": "procedure", "cluster": "Say yes and no politely", "level": "apply", "requires": ["j1"],
+        "misconceptions": ["iie is the normal way to decline", "hai always means yes rather than I follow you"],
         "check": {
-          "kc": "k5",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "How do you ask someone to repeat the price in Japanese?",
-          "options": [
-            "もう一度お願いします",
-            "繰り返してください",
-            "再度言ってください",
-            "聞き取れませんでした"
-          ],
+          "kc": "j5", "level": "apply", "kind": "mcq",
+          "stem": "Offered a bag you do not want, the natural refusal is…",
+          "options": ["daijoubu desu", "iie", "hai", "nai"],
           "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "Not using polite structures.",
-            "Misunderstanding how to request repetition.",
-            null
-          ]
+          "distractorSource": [null, "iie is the normal way to decline", "hai always means yes rather than I follow you", "iie is the normal way to decline"]
         }
       },
       {
-        "id": "k6",
-        "label": "Leave politely in Japanese.",
-        "type": "procedure",
-        "cluster": "departing",
-        "level": "apply",
-        "requires": [
-          "k5"
-        ],
-        "misconceptions": [
-          "Leaving without thanking the staff.",
-          "Using informal farewells."
-        ],
+        "id": "j6", "label": "Ask where something is and how much it costs",
+        "type": "procedure", "cluster": "Ask where and how much", "level": "apply", "requires": ["j4"],
+        "misconceptions": ["a question needs a rising tone rather than ka", "ikura asks about quantity"],
         "check": {
-          "kc": "k6",
-          "level": "understand",
-          "kind": "mcq",
-          "stem": "What is a polite way to leave the café in Japanese?",
-          "options": [
-            "ありがとうございました",
-            "さようなら",
-            "じゃね",
-            "あばよ"
-          ],
+          "kc": "j6", "level": "apply", "kind": "mcq",
+          "stem": "Asking the price, you say…",
+          "options": ["ikura desu ka", "ikura desu, said with a rising tone", "doko desu ka", "nan desu ka"],
           "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "Leaving without thanking the staff.",
-            "Using informal farewells.",
-            null
-          ]
+          "distractorSource": [null, "a question needs a rising tone rather than ka", "ikura asks about quantity", "ikura asks about quantity"]
+        }
+      },
+      {
+        "id": "j7", "label": "Ask someone to repeat or slow down",
+        "type": "procedure", "cluster": "Rescue a conversation", "level": "apply", "requires": ["j6"],
+        "misconceptions": ["saying wakarimasen ends the exchange", "you should switch to English when stuck"],
+        "check": {
+          "kc": "j7", "level": "apply", "kind": "mcq",
+          "stem": "The reply was too fast. The most useful thing to say is…",
+          "options": ["mou ichido onegaishimasu", "wakarimasen, then stop", "do you speak English?", "sumimasen, then walk away"],
+          "answerIndex": 0,
+          "distractorSource": [null, "saying wakarimasen ends the exchange", "you should switch to English when stuck", "you should switch to English when stuck"]
+        }
+      },
+      {
+        "id": "j8", "label": "Run a whole short exchange end to end and close it politely",
+        "type": "procedure", "cluster": "A whole short exchange", "level": "apply", "requires": ["j2", "j5", "j7"],
+        "misconceptions": ["sayounara is the normal way to leave a shop", "you can end an exchange by simply walking off"],
+        "check": {
+          "kc": "j8", "level": "apply", "kind": "mcq",
+          "stem": "Leaving the café after paying, you say…",
+          "options": ["gochisousama deshita", "sayounara", "nothing — you just leave", "konnichiwa"],
+          "answerIndex": 0,
+          "distractorSource": [null, "sayounara is the normal way to leave a shop", "you can end an exchange by simply walking off", "sayounara is the normal way to leave a shop"]
         }
       }
     ],
     "clusters": [
-      {
-        "title": "greeting",
-        "summary": "Components related to starting the conversation.",
-        "kcs": [
-          "k1"
-        ]
-      },
-      {
-        "title": "introducing",
-        "summary": "Components related to introducing oneself.",
-        "kcs": [
-          "k2"
-        ]
-      },
-      {
-        "title": "ordering",
-        "summary": "Components related to placing an order.",
-        "kcs": [
-          "k3"
-        ]
-      },
-      {
-        "title": "inquiring",
-        "summary": "Components related to asking for information.",
-        "kcs": [
-          "k4",
-          "k5"
-        ]
-      },
-      {
-        "title": "departing",
-        "summary": "Components related to ending the interaction.",
-        "kcs": [
-          "k6"
-        ]
-      }
-    ],
-    "capstoneRequires": [
-      "k1",
-      "k2",
-      "k3",
-      "k4",
-      "k5",
-      "k6"
+      { "title": "Say hello and who you are", "summary": "Open an exchange and place yourself in it.", "kcs": ["j1", "j2"] },
+      { "title": "Ask for a thing", "summary": "Point, count, and ask — the core transaction.", "kcs": ["j3", "j4"] },
+      { "title": "Say yes and no politely", "summary": "Accept and decline without giving offence.", "kcs": ["j5"] },
+      { "title": "Ask where and how much", "summary": "Turn a statement into a question.", "kcs": ["j6"] },
+      { "title": "Rescue a conversation", "summary": "What to say when the reply outruns you.", "kcs": ["j7"] },
+      { "title": "A whole short exchange", "summary": "All of it, start to finish, without English.", "kcs": ["j8"] }
     ]
   }
 }

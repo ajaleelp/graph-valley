@@ -13,6 +13,9 @@ import { validate } from './validate.mjs';
 
 const DEFAULT_BUDGET = 3;
 
+/** Fewer than this is a definition list, not a course. Matches the prompt. */
+export const MIN_KCS = 6;
+
 /* The topic arrives capitalised from cleanTopic, and reads badly mid-sentence
  * ("Explain how How black holes work works"). One place decides the phrasing,
  * so the server, the dialogue's fallback and the offline generator agree. */
@@ -90,6 +93,7 @@ export function assemble(spec, { budget = DEFAULT_BUDGET, known = new Set() } = 
     topic: spec.topic,
     spine: spec.spine,
     budget: { newKcs: budget },
+    minKcs: MIN_KCS,
     goal: spec.goal,
     capstone: spec.capstone,
     assumed: spec.assumed || [],

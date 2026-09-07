@@ -19,22 +19,28 @@ function body(extra = []) {
       },
     };
   };
-  const kcs = [mk('k1', [], 'One'), mk('k2', ['k1'], 'Two'), ...extra.map((id) => mk(id, [], 'Spare'))];
+  // A course-sized chain: the validator rejects anything thinner.
+  const names = ['One', 'One', 'Two', 'Two', 'Three', 'Three'];
+  const kcs = names.map((c, i) => mk(`k${i + 1}`, i ? [`k${i}`] : [], c));
+  kcs.push(...extra.map((id) => mk(id, [], 'Spare')));
+
   const clusters = [
-    { title: 'One', summary: 's', kcs: ['k1'] },
-    { title: 'Two', summary: 's', kcs: ['k2'] },
+    { title: 'One', summary: 's', kcs: ['k1', 'k2'] },
+    { title: 'Two', summary: 's', kcs: ['k3', 'k4'] },
+    { title: 'Three', summary: 's', kcs: ['k5', 'k6'] },
     ...(extra.length ? [{ title: 'Spare', summary: 's', kcs: extra }] : []),
   ];
+
   // The model declares what the capstone leans on, so a spare atom really is
   // scope creep rather than just another loose end.
-  return JSON.stringify({ spine: 'concept', assumed: [], kcs, clusters, capstoneRequires: ['k2'] });
+  return JSON.stringify({ spine: 'concept', assumed: [], kcs, clusters, capstoneRequires: ['k6'] });
 }
 
 test('produces a validated syllabus when the model answers well', async () => {
   const r = await buildSyllabus({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm: async () => body() });
   assert.equal(r.source, 'llm');
   assert.equal(validate(r.doc).ok, true);
-  assert.equal(r.doc.nodes.length, 2);
+  assert.equal(r.doc.nodes.length, 3);
 });
 
 test('retries once with the complaints, and keeps the second attempt', async () => {
