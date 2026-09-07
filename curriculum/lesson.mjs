@@ -67,3 +67,33 @@ Rules:
 - Teach THIS lesson only; assume its prerequisites are already held.
 - Do not write a quiz.`;
 }
+
+/* Read the model's reply.
+ *
+ * The prompt tells it not to write a quiz — the checks come from the syllabus,
+ * where they are tagged to atoms and their distractors are named misconceptions.
+ * So prose alone is the expected, correct reply, and demanding a check back
+ * rejected every well-formed one. A volunteered check is kept only if it is
+ * complete; a half-written one is worse than none.
+ */
+export function readLesson(raw) {
+  if (!raw) return null;
+  const content = Array.isArray(raw.content) ? raw.content.map(String).filter(Boolean).slice(0, 6) : [];
+  if (!content.length) return null;
+
+  const c = raw.check;
+  const options = Array.isArray(c?.options) ? c.options.map(String).slice(0, 4) : [];
+  const answerIndex = Number(c?.answerIndex);
+  const usable =
+    typeof c?.question === 'string' &&
+    options.length === 4 &&
+    Number.isInteger(answerIndex) &&
+    answerIndex >= 0 &&
+    answerIndex < 4;
+
+  if (!usable) return { content };
+  return {
+    content,
+    check: { question: c.question, options, answerIndex, explanation: String(c.explanation || '') },
+  };
+}

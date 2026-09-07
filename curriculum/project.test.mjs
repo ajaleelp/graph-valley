@@ -39,3 +39,18 @@ test('the first platform depends on nothing', () => {
   const g = toGraph(assemble(SPEC, { budget: 3 }));
   assert.deepEqual(g.nodes[0].deps, []);
 });
+
+test('names the journey without the prompt template showing through', async () => {
+  const { titleFor } = await import('./project.mjs');
+  // gpt-4o copies the schema's own phrasing into the statement, and that
+  // string is the headline the learner sees.
+  assert.equal(
+    titleFor({ goal: { statement: 'she will be able to implement a basic algorithm from scratch' }, topic: 'ml' }),
+    'Implement a basic algorithm from scratch',
+  );
+  assert.equal(
+    titleFor({ goal: { statement: 'Explain why light cannot escape.' }, topic: 'x' }),
+    'Explain why light cannot escape',
+  );
+  assert.equal(titleFor({ topic: 'sourdough' }), 'Sourdough');
+});

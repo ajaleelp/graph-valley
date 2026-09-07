@@ -16,7 +16,7 @@ import { llm, hasKey, describeModel } from './curriculum/llm.mjs';
 import { negotiate } from './curriculum/negotiate.mjs';
 import { buildSyllabus, defaultGoalFor, defaultCapstoneFor } from './curriculum/build.mjs';
 import { toGraph } from './curriculum/project.mjs';
-import { lessonPrompt as syllabusLessonPrompt, LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM } from './curriculum/lesson.mjs';
+import { lessonPrompt as syllabusLessonPrompt, LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM, readLesson } from './curriculum/lesson.mjs';
 
 const PORT = Number(process.env.PORT || 3217);
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
@@ -133,25 +133,6 @@ function fallbackLesson(topic, title, summary) {
   };
 }
 
-function normalizeLesson(x) {
-  if (!x) return null;
-  const content = Array.isArray(x.content) ? x.content.map(String).filter(Boolean).slice(0, 6) : [];
-  const c = x.check || {};
-  const options = Array.isArray(c.options) ? c.options.map(String).slice(0, 4) : [];
-  const answerIndex = Number(c.answerIndex);
-  if (!content.length || options.length !== 4 || typeof c.question !== 'string') return null;
-  if (!Number.isInteger(answerIndex) || answerIndex < 0 || answerIndex > 3) return null;
-  return {
-    content,
-    check: {
-      question: c.question,
-      options,
-      answerIndex,
-      explanation: String(c.explanation || ''),
-    },
-  };
-}
-
 /* ------------------------------ handlers ----------------------------- */
 
 const syllabusCache = new Map();
@@ -256,7 +237,7 @@ async function handleNode(req, res) {
   } catch (e) {
     console.warn('lesson call failed:', e.message);
   }
-  let lesson = normalizeLesson(extractJson(raw));
+  let lesson = readLesson(extractJson(raw));
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, title, summary);
   if (node?.checks?.length) lesson.check = toRendererCheck(node.checks[0]);

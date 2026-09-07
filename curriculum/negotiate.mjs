@@ -40,7 +40,7 @@ Answer with exactly one of:
 {"ask": "one short question, offering concrete alternatives"}
 {"done": true,
  "spine": "concept" if this is a body of knowledge, "task" if it is a skill to perform,
- "goal": {"statement": "she will be able to ...", "level": "remember|understand|apply|analyze|evaluate|create", "audience": "who she is"},
+ "goal": {"statement": "an action, starting with a verb — \"Trace a token through ...\", not \"she will be able to ...\"", "level": "remember|understand|apply|analyze|evaluate|create", "audience": "who she is"},
  "capstone": {"prompt": "the task that would prove it", "rubric": ["what a good answer shows", "..."]},
  "priors": ["anything she said she already knows, in her own words"]}
 

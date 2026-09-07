@@ -153,6 +153,10 @@ export function pack(spec, { known = new Set(), budget = 3, spine } = {}) {
   return { nodes, edges, problems };
 }
 
+/** Platform titles are signage. Models return them lower-cased about half the
+ *  time, and a valley labelled "compilation process (1)" reads as a stub. */
+const asLabel = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
 function buildNode(seq, group, teaches, part, byKc, needsOf) {
   const inside = new Set(teaches);
   const requires = [...new Set(teaches.flatMap(needsOf))].filter((d) => !inside.has(d));
@@ -160,7 +164,7 @@ function buildNode(seq, group, teaches, part, byKc, needsOf) {
 
   return {
     id: `p${seq}`,
-    title: `${group.title}${part}`,
+    title: `${asLabel(group.title)}${part}`,
     summary: group.summary || byKc.get(teaches[0])?.label || group.title,
     goal: false,
     objective: { verb: 'understand', level },

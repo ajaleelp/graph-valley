@@ -56,3 +56,36 @@ test('falls back to title and summary when the platform is unknown', () => {
   assert.match(p, /Starters/);
   assert.match(p, /wild yeast/);
 });
+
+/* --- reading the model's reply ---------------------------------------- */
+
+test('accepts prose alone, because the check comes from the syllabus', async () => {
+  const { readLesson } = await import('./lesson.mjs');
+  // The prompt tells the model not to write a quiz. Demanding one back
+  // rejected every well-formed reply and sent every lesson to the fallback.
+  const l = readLesson({ content: ['one', 'two'] });
+  assert.deepEqual(l.content, ['one', 'two']);
+  assert.equal(l.check, undefined);
+});
+
+test('keeps a check when the model volunteers a well-formed one', async () => {
+  const { readLesson } = await import('./lesson.mjs');
+  const l = readLesson({
+    content: ['one'],
+    check: { question: 'q?', options: ['a', 'b', 'c', 'd'], answerIndex: 2, explanation: 'because' },
+  });
+  assert.equal(l.check.answerIndex, 2);
+});
+
+test('rejects a reply with no prose at all', async () => {
+  const { readLesson } = await import('./lesson.mjs');
+  assert.equal(readLesson({ content: [] }), null);
+  assert.equal(readLesson(null), null);
+});
+
+test('drops a half-written check rather than showing it', async () => {
+  const { readLesson } = await import('./lesson.mjs');
+  const l = readLesson({ content: ['one'], check: { question: 'q?', options: ['a', 'b'] } });
+  assert.deepEqual(l.content, ['one']);
+  assert.equal(l.check, undefined);
+});

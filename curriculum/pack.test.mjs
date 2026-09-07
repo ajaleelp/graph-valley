@@ -162,3 +162,12 @@ test('falls back to prerequisite order when the proposed grouping is circular', 
   }
   assert.equal(walked.length, nodes.length, `stalled after ${walked.length}/${nodes.length} platforms`);
 });
+
+test('capitalises platform titles, which are labels the learner reads', () => {
+  const spec = blackHoles();
+  spec.clusters[0].title = 'falling and escaping';
+  spec.kcs[0].cluster = 'falling and escaping';
+  spec.kcs[1].cluster = 'falling and escaping';
+  const { nodes } = pack(spec, { budget: 3 });
+  assert.equal(nodes[0].title, 'Falling and escaping');
+});

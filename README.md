@@ -7,9 +7,12 @@
 > by a socket contract, and `public/` should be rebuilt on it. See
 > [poc/README.md](poc/README.md) and section 5 of [CHALLENGES.md](CHALLENGES.md).
 >
-> **The curriculum** is newly rebuilt on standard instructional design, verified
-> headlessly, and now runs against a real model — the committed fixtures are
-> recorded `gpt-4o` output. What it produces has never been read by a learner.
+> **The curriculum** is rebuilt on standard instructional design and **works end
+> to end against a real model**: a topic becomes a negotiated goal, a set of
+> knowledge components, a validated platform graph, and a lesson written from
+> those components — every stage verified headlessly, and the whole path checked
+> over HTTP. The committed fixtures are recorded `gpt-4o` output. What it
+> produces has still never been *read* by a learner.
 > See [What isn't built yet](#what-isnt-built-yet).
 
 **Type a goal. Walk the path. Reach the summit.**
@@ -78,6 +81,12 @@ sync — the same trick `poc/` pulls with sockets and its nav graph. Forks appea
 where the subject genuinely branches, rather than being sprinkled for variety.
 
 **5 · Assert it.** Curriculum quality stops being something you eyeball.
+
+Verified end to end on `gpt-4o`: `POST /api/negotiate` scoped "machine learning"
+to *implement a supervised learning algorithm from scratch* in three turns,
+`/api/syllabus` returned six atoms over four platforms with a real fork, and
+`/api/node` wrote the lesson from those atoms. The projection fed straight into
+`poc/build.js` — 18 slices, 4 courts, no seam problems.
 
 ```
 node curriculum/check.mjs      # or: npm run check
