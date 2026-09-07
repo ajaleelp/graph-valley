@@ -11,3 +11,4 @@ server.log
 # API keys are passed as environment variables; never commit them
 .env
 .env.*
+!.env.example

@@ -51,10 +51,19 @@ export async function buildSyllabus({ topic, goal, capstone, spine = 'concept', 
   if (llm) {
     for (const complaints of [[], null]) {
       const previous = attempts[attempts.length - 1];
-      const spec = await decompose({
-        topic, goal, capstone, spine, llm,
-        complaints: complaints === null ? previous?.errors || [] : complaints,
-      });
+      let spec;
+      try {
+        spec = await decompose({
+          topic, goal, capstone, spine, llm,
+          complaints: complaints === null ? previous?.errors || [] : complaints,
+        });
+      } catch (e) {
+        // The call never reached the model. Asking again changes nothing, and
+        // costs the learner another wait.
+        console.warn('model call failed:', e.message);
+        attempts.push({ errors: [{ code: 'call-failed', message: e.message }] });
+        break;
+      }
 
       if (spec) {
         const doc = assemble(spec, { budget, known });

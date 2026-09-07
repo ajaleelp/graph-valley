@@ -5,9 +5,9 @@
   "description": "Gamified AI learning: type a goal, get a traversable knowledge-graph world.",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test 'curriculum/*.test.mjs'",
-    "check": "node curriculum/check.mjs",
+    "check": "node --env-file-if-exists=.env curriculum/check.mjs",
     "poc": "node poc/serve.mjs",
     "poc:check": "node poc/check.mjs"
   }

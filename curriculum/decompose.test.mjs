@@ -96,3 +96,11 @@ test('ignores capstone atoms that do not exist', async () => {
   const spec = await decompose({ topic: 'x', goal: GOAL, capstone: { prompt: 'p', rubric: [] }, llm: saying(JSON.stringify(body)) });
   assert.deepEqual(spec.capstone.requires, ['k2']);
 });
+
+test('asks for enough tokens to fit a full decomposition', async () => {
+  let budget = 0;
+  const llm = async (_s, _u, maxTokens) => { budget = maxTokens; return RESPONSE; };
+  await decompose({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm });
+  // A 13-atom decomposition with a check per atom runs past 3,000 tokens.
+  assert.ok(budget >= 6000, `asked for only ${budget} tokens; a real decomposition truncates`);
+});

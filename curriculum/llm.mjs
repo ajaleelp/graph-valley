@@ -16,13 +16,13 @@ export const describeModel = () =>
   (OPENAI_KEY && `OpenAI (${OPENAI_MODEL})`) ||
   'none — demo mode (set ANTHROPIC_API_KEY or OPENAI_API_KEY)';
 
+/* Throws on transport failure rather than returning null. A call that never
+ * reached the model is a different fact from a model that answered badly, and
+ * collapsing the two made a dead API report itself as unparseable JSON — and
+ * got retried, which no amount of asking again was going to fix. */
 export async function llm(system, user, maxTokens = 2200) {
-  try {
-    if (ANTHROPIC_KEY) return await anthropic(system, user, maxTokens);
-    if (OPENAI_KEY) return await openai(system, user, maxTokens);
-  } catch (e) {
-    console.warn('LLM call failed:', e.message);
-  }
+  if (ANTHROPIC_KEY) return await anthropic(system, user, maxTokens);
+  if (OPENAI_KEY) return await openai(system, user, maxTokens);
   return null;
 }
 
@@ -44,6 +44,9 @@ async function anthropic(system, user, max_tokens) {
   });
   if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
   const data = await res.json();
+  if (data.stop_reason === 'max_tokens') {
+    console.warn(`  model response hit the ${max_tokens}-token ceiling and was cut off`);
+  }
   return (data.content || []).map((b) => b.text || '').join('\n');
 }
 
@@ -62,7 +65,10 @@ async function openai(system, user, max_tokens) {
     }),
     signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
+  if (data.choices?.[0]?.finish_reason === 'length') {
+    console.warn(`  model response hit the ${max_tokens}-token ceiling and was cut off`);
+  }
   return data.choices?.[0]?.message?.content || '';
 }

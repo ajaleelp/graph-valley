@@ -168,7 +168,12 @@ async function handleNegotiate(req, res) {
     .map((t) => ({ text: String(t?.text || '').slice(0, 400) }))
     .filter((t) => t.text);
 
-  const outcome = hasKey() ? await negotiate({ topic, turns, llm }) : null;
+  let outcome = null;
+  try {
+    if (hasKey()) outcome = await negotiate({ topic, turns, llm });
+  } catch (e) {
+    console.warn('negotiate failed:', e.message);
+  }
   if (!outcome) {
     // No key, or nothing usable came back: skip the dialogue and take the topic
     // at face value rather than stranding the learner on a chat screen.
@@ -241,11 +246,17 @@ async function handleNode(req, res) {
   const doc = [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
   const node = doc?.nodes.find((n) => n.title === title);
 
-  let lesson = normalizeLesson(extractJson(await llm(
-    SYLLABUS_LESSON_SYSTEM,
-    syllabusLessonPrompt(doc, node, { topic, title, summary }),
-    2000,
-  )));
+  let raw = null;
+  try {
+    raw = await llm(
+      SYLLABUS_LESSON_SYSTEM,
+      syllabusLessonPrompt(doc, node, { topic, title, summary }),
+      2000,
+    );
+  } catch (e) {
+    console.warn('lesson call failed:', e.message);
+  }
+  let lesson = normalizeLesson(extractJson(raw));
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, title, summary);
   if (node?.checks?.length) lesson.check = toRendererCheck(node.checks[0]);

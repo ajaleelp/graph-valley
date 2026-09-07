@@ -48,3 +48,10 @@ test('returns nothing when the model answers with something unusable', async () 
   const r = await negotiate({ topic: 'black holes', turns: [], llm: saying('sorry') });
   assert.equal(r, null);
 });
+
+test('asks for only the few tokens a question or a commitment needs', async () => {
+  let budget = Infinity;
+  const llm = async (_s, _u, maxTokens) => { budget = maxTokens; return JSON.stringify(COMMITTED); };
+  await negotiate({ topic: 'x', turns: [], llm });
+  assert.ok(budget <= 1200, `asked for ${budget} tokens for a one-line answer`);
+});

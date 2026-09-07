@@ -8,6 +8,12 @@
 
 import { LEVELS } from './validate.mjs';
 
+/* A dozen-odd atoms, each with a label, prerequisites, two or three
+ * misconceptions and a four-option check, runs comfortably past 3,000 tokens.
+ * Budget for the largest decomposition the prompt permits, not the smallest —
+ * a truncated response is unparseable, and costs a whole call to discover. */
+export const DECOMPOSE_TOKENS = 8000;
+
 export const DECOMPOSE_SYSTEM =
   'You decompose a learning goal into its knowledge components. Output ONLY valid JSON. No markdown, no prose.';
 
@@ -77,7 +83,11 @@ const str = (v, fallback = '') => (typeof v === 'string' ? v : fallback);
 const arr = (v) => (Array.isArray(v) ? v : []);
 
 export async function decompose({ topic, goal, capstone, spine = 'concept', llm, complaints = [] }) {
-  const raw = await llm(DECOMPOSE_SYSTEM, decomposePrompt({ topic, goal, capstone, spine, complaints }));
+  const raw = await llm(
+    DECOMPOSE_SYSTEM,
+    decomposePrompt({ topic, goal, capstone, spine, complaints }),
+    DECOMPOSE_TOKENS,
+  );
   const body = extractJson(raw);
   if (!body || !Array.isArray(body.kcs) || !body.kcs.length) return null;
 

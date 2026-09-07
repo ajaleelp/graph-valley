@@ -12,6 +12,9 @@
 
 export const MAX_TURNS = 3;
 
+/** One question, or a goal and a capstone. Nothing here is long. */
+export const NEGOTIATE_TOKENS = 900;
+
 export const NEGOTIATE_SYSTEM =
   'You scope a learning goal by conversation. Output ONLY valid JSON. No markdown, no prose.';
 
@@ -79,7 +82,9 @@ function defaultCommitment(topic) {
 
 export async function negotiate({ topic, turns = [], llm, maxTurns = MAX_TURNS }) {
   const forced = turns.length >= maxTurns;
-  const body = extractJson(await llm(NEGOTIATE_SYSTEM, negotiatePrompt({ topic, turns, forced })));
+  const body = extractJson(
+    await llm(NEGOTIATE_SYSTEM, negotiatePrompt({ topic, turns, forced }), NEGOTIATE_TOKENS),
+  );
 
   if (!body) return forced ? defaultCommitment(topic) : null;
 

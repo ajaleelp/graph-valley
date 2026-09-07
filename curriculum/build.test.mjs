@@ -81,3 +81,22 @@ test('the built-in generator fills a valley worth walking', async () => {
   assert.ok(r.doc.nodes.length >= 4, `demo mode gave only ${r.doc.nodes.length} platforms`);
   assert.ok(r.doc.edges.length >= 3);
 });
+
+test('does not retry when the model call itself failed', async () => {
+  let calls = 0;
+  const llm = async () => { calls++; throw new Error('OpenAI HTTP 429: no credits'); };
+  const r = await buildSyllabus({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm });
+
+  assert.equal(calls, 1, 'a dead API cannot be talked round by asking again');
+  assert.equal(r.source, 'fallback');
+  assert.equal(r.errors[0].code, 'call-failed');
+  assert.match(r.errors[0].message, /429/, 'the reason must survive into the log');
+});
+
+test('still retries when the model answered with something unusable', async () => {
+  let calls = 0;
+  const llm = async () => { calls++; return calls === 1 ? 'not json at all' : body(); };
+  const r = await buildSyllabus({ topic: 'x', goal: GOAL, capstone: CAPSTONE, llm });
+  assert.equal(calls, 2);
+  assert.equal(r.source, 'llm-retry');
+});
