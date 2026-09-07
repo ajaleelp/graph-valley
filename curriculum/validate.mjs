@@ -43,13 +43,18 @@ export function validate(doc) {
 
   // Scope creep: everything taught must be something the capstone leans on,
   // directly or through the component prerequisite relation.
+  const capstoneNeeds = doc.capstone?.requires;
+  if (!Array.isArray(capstoneNeeds) || !capstoneNeeds.length) {
+    fail('capstone-empty', 'the capstone names no components, so nothing decides what the course is for');
+  }
+
   const needed = new Set();
   const walk = (id) => {
     if (needed.has(id)) return;
     needed.add(id);
     for (const dep of byKc.get(id)?.requires || []) walk(dep);
   };
-  for (const k of doc.capstone.requires) walk(k);
+  for (const k of capstoneNeeds || []) walk(k);
   for (const [k, owner] of teacherOf) {
     if (!needed.has(k)) fail('kc-unused', `${owner} teaches ${k}, which the capstone never needs`, k);
   }
@@ -130,9 +135,22 @@ export function validate(doc) {
     successors.get(e.from).add(e.to);
     predecessors.get(e.to).add(e.from);
 
-    if (rank(to.objective?.level) < rank(from.objective?.level)) {
-      fail('level-regression', `${e.to} ("${to.objective?.level}") is easier than ${e.from} ("${from.objective?.level}") that leads to it`, e.to);
-    }
+  }
+
+  // The course must actually arrive. A summit pitched below the goal's own
+  // level means the capstone asks for more than anything ever taught.
+  //
+  // This replaces a per-edge "difficulty never drops" rule, which encoded a
+  // false premise: a platform's level is the max over its atoms, so bundling
+  // one hard insight with easy facts made every following platform look like a
+  // regression. Curricula legitimately dip — reach a synthesis, then zoom into
+  // a detail. What matters is not that every step is harder than the last, but
+  // that the course reaches what the goal asked for.
+  const summit = goals[0];
+  if (summit && doc.goal?.level && rank(summit.objective?.level) < rank(doc.goal.level)) {
+    fail('summit-below-goal',
+      `the summit teaches to "${summit.objective?.level}" but the goal asks for "${doc.goal.level}"`,
+      summit.id);
   }
 
   // A junction with too many ways out cannot be read as a fork.

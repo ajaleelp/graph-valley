@@ -118,15 +118,32 @@ test('rejects a check pitched above the level its platform taught at', () => {
   );
 });
 
-test('rejects a difficulty level that drops as the path advances', () => {
+test('allows difficulty to dip after a hard insight', () => {
+  // Elaboration theory's zoom lens: reach a synthesis, then zoom into a
+  // mechanical detail. A platform's level is the max over its atoms, so an
+  // edge-by-edge difficulty rule reads a legitimate zoom-in as a regression —
+  // and a false reject costs the learner a bespoke course. Only the summit
+  // has to arrive; see the next test.
+  const r = validate(syllabus({
+    goal: { statement: 'do the thing', level: 'apply', audience: 'anyone' },
+    nodes: [
+      node('n1', { teaches: ['k1'], level: 'analyze' }),
+      node('n2', { teaches: ['k2'], requires: ['k1'], level: 'understand', goal: true }),
+    ],
+  }));
+  assert.deepEqual(r.errors.filter((e) => e.code.startsWith('level')), []);
+});
+
+test('rejects a summit that never reaches the level the goal asked for', () => {
   failsWith(
     syllabus({
+      goal: { statement: 'do the thing', level: 'analyze', audience: 'anyone' },
       nodes: [
-        node('n1', { teaches: ['k1'], level: 'apply' }),
-        node('n2', { teaches: ['k2'], requires: ['k1'], level: 'remember', goal: true }),
+        node('n1', { teaches: ['k1'], level: 'understand' }),
+        node('n2', { teaches: ['k2'], requires: ['k1'], level: 'understand', goal: true }),
       ],
     }),
-    'level-regression',
+    'summit-below-goal',
   );
 });
 
@@ -170,4 +187,8 @@ test('rejects a syllabus without exactly one summit', () => {
     }),
     'goal-not-unique',
   );
+});
+
+test('rejects a capstone that names no atoms, rather than throwing', () => {
+  failsWith(syllabus({ capstone: { prompt: 'now do it', rubric: [] } }), 'capstone-empty');
 });

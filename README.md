@@ -8,8 +8,9 @@
 > [poc/README.md](poc/README.md) and section 5 of [CHALLENGES.md](CHALLENGES.md).
 >
 > **The curriculum** is newly rebuilt on standard instructional design and is
-> headless-verifiable — but it has never been run against a real model. The
-> prompts are unproven and the fixtures are hand-authored stand-ins. See
+> headless-verifiable — but it has never been run against a real API. Two of the
+> five fixtures were written cold from the prompts; the rest were authored
+> knowing what the validator wanted. See
 > [What isn't built yet](#what-isnt-built-yet).
 
 **Type a goal. Walk the path. Reach the summit.**
@@ -87,11 +88,12 @@ node --test 'curriculum/*.test.mjs'   # or: npm test
 The validator rejects a syllabus with a hole (an atom required but never
 taught), a redundancy (taught twice), scope creep (an atom the capstone never
 needs), an overloaded platform, an unexamined atom, a check pitched above what
-its platform taught, a difficulty level that drops as the path advances, a
-distractor not drawn from a named misconception, an edge no shared atom
-justifies, a circular prerequisite, or a junction wider than the world can
-render legibly. When it rejects one, the pipeline hands the specific complaints
-back to the model and retries once before falling back.
+its platform taught, a summit that never reaches the level the goal asked for, a
+capstone that names no atoms at all, a distractor not drawn from a named
+misconception, an edge no shared atom justifies, a circular prerequisite, or a
+junction wider than the world can render legibly. When it rejects one, the
+pipeline hands the specific complaints back to the model and retries once
+before falling back.
 
 `check.mjs` also reports the *shape* of each world — platforms, roots, forks,
 joins, longest path — because a valley with no junctions is a corridor, and
@@ -117,20 +119,21 @@ that's a quality signal no single assertion catches.
   the summit stays a ghost on the horizon.
 - **Forks asked at the fork** — she walks out to the junction before asking.
 - **Six chapter palettes**, chosen deterministically from your topic.
-- **A curriculum that can be argued with** — 48 unit tests, 22 end-to-end
-  assertions over three fixture topics, all headless.
+- **A curriculum that can be argued with** — 53 unit tests, 36 end-to-end
+  assertions over five fixture topics, all headless.
 - **Zero npm dependencies** — one Node file, vanilla JS frontend, `node:test`.
 
 ---
 
 ## What isn't built yet
 
-**The curriculum has never met a real model.** Everything above is verified
-against *hand-authored* fixtures — realistic model output that I wrote, not
-output a model produced. `node curriculum/check.mjs --live` calls the real API
-and re-records them, and until someone runs it with a key, the prompts in
-`decompose.mjs` and `negotiate.mjs` are unproven. The structure is sound; whether
-a model will fill it well is untested.
+**The curriculum has never met a real API.** Two of the five fixtures
+(`transformers`, `sourdough`) were written cold from the prompts, without sight
+of the validator — the closest thing here to a real run, and enough to shake out
+three genuine bugs. The other three were authored knowing what the validator
+wanted, which makes them weaker evidence. `node curriculum/check.mjs --live`
+calls a real model and re-records; nobody has run it. The structure holds up;
+how a model in the wild fills it is still untested.
 
 **No adaptation.** Everyone still gets the same valley. The schema is built for
 it — `pack()` already takes a set of atoms the learner holds and re-derives a
@@ -234,7 +237,7 @@ real misconceptions rather than invented ones.
 │   ├── lesson.mjs        #   the lesson prompt, written from the syllabus
 │   ├── llm.mjs           #   Anthropic / OpenAI plumbing
 │   ├── check.mjs         #   headless end-to-end verification + shape report
-│   └── fixtures/         #   hand-authored model responses; --live re-records
+│   └── fixtures/         #   recorded model responses; --live re-records
 └── public/
     ├── index.html        # screens: home, loading, world, lesson sheet, fork, summit
     ├── style.css         # flat palette as CSS vars, per-state overrides, sky, HUD

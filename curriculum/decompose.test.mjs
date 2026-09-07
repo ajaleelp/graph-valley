@@ -77,3 +77,22 @@ test('passes the validator complaints back to the model when retrying', async ()
   assert.match(seen, /kc-untaught/);
   assert.match(seen, /nothing teaches/);
 });
+
+test('reads which atoms the capstone actually exercises', async () => {
+  const body = JSON.parse(RESPONSE);
+  body.capstoneRequires = ['k2'];
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: { prompt: 'p', rubric: [] }, llm: saying(JSON.stringify(body)) });
+  assert.deepEqual(spec.capstone.requires, ['k2']);
+});
+
+test('falls back to the atoms nothing else needs when the model omits that', async () => {
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: { prompt: 'p', rubric: [] }, llm: saying(RESPONSE) });
+  assert.deepEqual(spec.capstone.requires, ['k2'], 'k2 is the only atom nothing else requires');
+});
+
+test('ignores capstone atoms that do not exist', async () => {
+  const body = JSON.parse(RESPONSE);
+  body.capstoneRequires = ['k2', 'k99'];
+  const spec = await decompose({ topic: 'x', goal: GOAL, capstone: { prompt: 'p', rubric: [] }, llm: saying(JSON.stringify(body)) });
+  assert.deepEqual(spec.capstone.requires, ['k2']);
+});

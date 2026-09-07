@@ -25,7 +25,9 @@ function body(extra = []) {
     { title: 'Two', summary: 's', kcs: ['k2'] },
     ...(extra.length ? [{ title: 'Spare', summary: 's', kcs: extra }] : []),
   ];
-  return JSON.stringify({ spine: 'concept', assumed: [], kcs, clusters });
+  // The model declares what the capstone leans on, so a spare atom really is
+  // scope creep rather than just another loose end.
+  return JSON.stringify({ spine: 'concept', assumed: [], kcs, clusters, capstoneRequires: ['k2'] });
 }
 
 test('produces a validated syllabus when the model answers well', async () => {

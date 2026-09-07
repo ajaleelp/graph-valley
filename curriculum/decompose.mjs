@@ -44,7 +44,8 @@ a learner could reach the goal without.
                     "stem": "a question answerable only if you hold this component",
                     "options": ["...", "...", "...", "..."], "answerIndex": 0,
                     "distractorSource": [null, "the misconception each wrong option embodies", "...", "..."]}}],
- "clusters": [{"title": "2-5 words, concrete", "summary": "one sentence", "kcs": ["k1"]}]}
+ "clusters": [{"title": "2-5 words, concrete", "summary": "one sentence", "kcs": ["k1"]}],
+ "capstoneRequires": ["ids of the components the capstone task actually exercises"]}
 
 Rules:
 - 6 to 16 components. "requires" must form a DAG. Every component must be
@@ -52,6 +53,9 @@ Rules:
 - Every wrong option in a check must come from one of that component's own
   named misconceptions, quoted exactly. The correct option's slot is null.
 - Clusters partition the components: every id appears in exactly one cluster.
+- "capstoneRequires" names the components the capstone leans on directly. Every
+  other component must be reachable from those through "requires" — anything
+  that isn't, the goal does not need, so do not include it.
 - No filler. No "Advanced Topics", no "Introduction to X".${retry}`;
 }
 
@@ -97,6 +101,14 @@ export async function decompose({ topic, goal, capstone, spine = 'concept', llm,
     k.requires = [...new Set(k.requires.filter((d) => ids.has(d) && d !== k.id))];
   }
 
+  // Which atoms the capstone leans on. This decides scope: everything reachable
+  // from here is needed, and anything else is scope creep the validator rejects.
+  // When the model does not say, fall back to the atoms nothing else requires —
+  // the ends of every chain, which is where a capstone necessarily lands.
+  const needed = new Set(kcs.flatMap((k) => k.requires));
+  const declared = arr(body.capstoneRequires).map(String).filter((id) => ids.has(id));
+  const capstoneRequires = declared.length ? declared : kcs.filter((k) => !needed.has(k.id)).map((k) => k.id);
+
   const clusters = arr(body.clusters)
     .map((c) => ({
       title: str(c?.title).trim(),
@@ -108,7 +120,7 @@ export async function decompose({ topic, goal, capstone, spine = 'concept', llm,
   return {
     topic,
     goal,
-    capstone,
+    capstone: { ...capstone, requires: capstoneRequires },
     spine: body.spine === 'task' ? 'task' : spine,
     assumed: arr(body.assumed).map(String),
     kcs,
