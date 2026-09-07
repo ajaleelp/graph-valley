@@ -147,17 +147,29 @@ test('rejects a summit that never reaches the level the goal asked for', () => {
   );
 });
 
-test('rejects a junction the world cannot render legibly', () => {
+test('accepts a fork one way per side of a court', () => {
   const branch = (id, k) => node(id, { teaches: [k], requires: ['k1'], goal: id === 'n5' });
+  const r = validate(syllabus({
+    kcs: [kc('k1'), kc('k2', ['k1']), kc('k3', ['k1']), kc('k4', ['k1']), kc('k5', ['k1'])],
+    capstone: { prompt: 'now do it', requires: ['k2', 'k3', 'k4', 'k5'], rubric: ['does it'] },
+    nodes: [
+      node('n1', { teaches: ['k1'] }),
+      branch('n2', 'k2'), branch('n3', 'k3'), branch('n4', 'k4'), branch('n5', 'k5'),
+    ],
+    edges: ['n2', 'n3', 'n4', 'n5'].map((to) => ({ from: 'n1', to, via: 'k1' })),
+  }));
+  assert.deepEqual(r.errors.filter((e) => e.code === 'branching-too-wide'), []);
+});
+
+test('rejects a junction with more ways out than a court has sides', () => {
+  const branch = (id, k) => node(id, { teaches: [k], requires: ['k1'], goal: id === 'n6' });
+  const ks = ['k2', 'k3', 'k4', 'k5', 'k6'];
   failsWith(
     syllabus({
-      kcs: [kc('k1'), kc('k2', ['k1']), kc('k3', ['k1']), kc('k4', ['k1']), kc('k5', ['k1'])],
-      capstone: { prompt: 'now do it', requires: ['k2', 'k3', 'k4', 'k5'], rubric: ['does it'] },
-      nodes: [
-        node('n1', { teaches: ['k1'] }),
-        branch('n2', 'k2'), branch('n3', 'k3'), branch('n4', 'k4'), branch('n5', 'k5'),
-      ],
-      edges: ['n2', 'n3', 'n4', 'n5'].map((to) => ({ from: 'n1', to, via: 'k1' })),
+      kcs: [kc('k1'), ...ks.map((k) => kc(k, ['k1']))],
+      capstone: { prompt: 'now do it', requires: ks, rubric: ['does it'] },
+      nodes: [node('n1', { teaches: ['k1'] }), ...ks.map((k, i) => branch(`n${i + 2}`, k))],
+      edges: ks.map((_, i) => ({ from: 'n1', to: `n${i + 2}`, via: 'k1' })),
     }),
     'branching-too-wide',
   );
@@ -223,4 +235,31 @@ test('rejects a decomposition too thin to be a course', () => {
   // routinely returned three. A definition list is not a syllabus.
   const kcs = [kc('k1'), kc('k2', ['k1'])];
   failsWith(syllabus({ kcs, minKcs: 6 }), 'too-few-atoms');
+});
+
+test('rejects a world with no platform you can start on', () => {
+  // Atoms form a clean chain, but the grouping interleaves them so each
+  // platform waits on the other. Acyclic atoms, circular platforms — a live
+  // model produced exactly this, and it validated clean.
+  failsWith(
+    syllabus({
+      kcs: [kc('k1'), kc('k2', ['k1']), kc('k3', ['k2']), kc('k4', ['k3'])],
+      capstone: { prompt: 'now do it', requires: ['k4'], rubric: ['does it'] },
+      nodes: [
+        node('n1', { teaches: ['k1', 'k3'], requires: ['k2'] }),
+        node('n2', { teaches: ['k2', 'k4'], requires: ['k1', 'k3'], goal: true }),
+      ],
+      edges: [
+        { from: 'n2', to: 'n1', via: 'k2' },
+        { from: 'n1', to: 'n2', via: 'k1' },
+        { from: 'n1', to: 'n2', via: 'k3' },
+      ],
+    }),
+    'unreachable-platform',
+  );
+});
+
+test('accepts a world every platform of which can be reached in turn', () => {
+  const r = validate(syllabus());
+  assert.deepEqual(r.errors.filter((e) => e.code === 'unreachable-platform'), []);
 });

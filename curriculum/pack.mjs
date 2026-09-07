@@ -33,6 +33,34 @@ function orderStably(ids, depsOf) {
   return { order: out, stuck: [] };
 }
 
+/** Layers of atoms that depend on nothing outside the layers before them. */
+function byDepth(live, needsOf) {
+  const depth = new Map();
+  const settle = (id, seen = new Set()) => {
+    if (depth.has(id)) return depth.get(id);
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const deps = needsOf(id);
+    const d = deps.length ? 1 + Math.max(...deps.map((k) => settle(k, seen))) : 0;
+    depth.set(id, d);
+    return d;
+  };
+  live.forEach((k) => settle(k.id));
+
+  const layers = new Map();
+  for (const k of live) {
+    const d = depth.get(k.id);
+    if (!layers.has(d)) layers.set(d, []);
+    layers.get(d).push(k.id);
+  }
+
+  return [...layers.keys()].sort((a, b) => a - b).map((d) => ({
+    title: `Step ${d + 1}`,
+    summary: '',
+    kcs: layers.get(d),
+  }));
+}
+
 export function pack(spec, { known = new Set(), budget = 3, spine } = {}) {
   const problems = [];
   const shape = spine || spec.spine || 'concept';
@@ -70,10 +98,19 @@ export function pack(spec, { known = new Set(), budget = 3, spine } = {}) {
 
   const titles = groups.map((c) => c.title);
   const ordered = orderStably(titles, (t) => clusterDeps.get(t) || []);
+
+  // The grouping is a hint; the prerequisites are the fact. Clusters that wait
+  // on each other cannot be laid out in any order that a learner could walk, so
+  // when that happens the grouping is discarded and the atoms are regrouped by
+  // how deep they sit in the prerequisite graph. A worse-titled world beats one
+  // with no way into it.
+  let sequence;
   if (ordered.stuck.length) {
-    problems.push(`clusters depend on each other in a circle: ${ordered.stuck.join(', ')}`);
+    problems.push(`clusters depend on each other in a circle: ${ordered.stuck.join(', ')} — regrouped by prerequisite depth`);
+    sequence = byDepth(live, needsOf);
+  } else {
+    sequence = ordered.order.map((t) => groups.find((c) => c.title === t));
   }
-  const sequence = [...ordered.order, ...ordered.stuck].map((t) => groups.find((c) => c.title === t));
 
   // 4. Split any cluster that carries more than a platform may introduce.
   const nodes = [];

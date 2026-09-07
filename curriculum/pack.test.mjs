@@ -137,3 +137,28 @@ test('holds scaffolding steady on a concept spine', () => {
   const scaffolds = new Set(nodes.map((n) => n.segments.find((s) => s.kind === 'apply').scaffold));
   assert.deepEqual([...scaffolds], ['partial']);
 });
+
+test('falls back to prerequisite order when the proposed grouping is circular', () => {
+  // A live model grouped an acyclic chain into themes that wait on each other.
+  // Honouring that grouping produces a valley with no way in, so the grouping
+  // is what has to give — it is a hint, and the atoms are the fact.
+  const spec = {
+    topic: 'x', spine: 'concept',
+    goal: { statement: 'do it', level: 'apply' },
+    capstone: { prompt: 'prove it', requires: ['k4'], rubric: ['r'] },
+    assumed: [],
+    kcs: [atom('k1'), atom('k2', { requires: ['k1'] }), atom('k3', { requires: ['k2'] }), atom('k4', { requires: ['k3'] })],
+    clusters: [cluster('Odd', ['k1', 'k3']), cluster('Even', ['k2', 'k4'])],
+  };
+  const { nodes } = pack(spec, { budget: 3 });
+
+  const held = new Set();
+  const walked = [];
+  for (;;) {
+    const next = nodes.find((n) => !walked.includes(n.id) && n.requires.every((k) => held.has(k)));
+    if (!next) break;
+    walked.push(next.id);
+    next.teaches.forEach((k) => held.add(k));
+  }
+  assert.equal(walked.length, nodes.length, `stalled after ${walked.length}/${nodes.length} platforms`);
+});

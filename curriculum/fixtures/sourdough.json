@@ -14,324 +14,268 @@
       "proposes one change, not five"
     ],
     "requires": [
-      "s8"
+      "k6"
     ]
   },
   "response": {
     "spine": "task",
     "assumed": [
-      "using an oven",
-      "weighing ingredients"
+      "basic kitchen tool usage",
+      "basic understanding of fermentation",
+      "simple math skills for measurement"
     ],
     "kcs": [
       {
-        "id": "s1",
-        "label": "Feed a starter and tell when it is at peak",
+        "id": "k1",
+        "label": "Identify the correct baking schedule based on room temperature",
+        "type": "concept",
+        "cluster": "Scheduling and Timing",
+        "level": "understand",
+        "requires": [],
+        "misconceptions": [
+          "Room temperature doesn't affect fermentation rate",
+          "All sourdough is baked on a strict timeline",
+          "Timing is flexible regardless of temperature"
+        ],
+        "check": {
+          "answerIndex": 2,
+          "kc": "k1",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "How does room temperature affect your sourdough baking schedule?",
+          "options": [
+            "Room temperature is irrelevant to baking schedule",
+            "All sourdough bakes on the same timeline",
+            "Higher temperatures speed up fermentation, requiring a shorter schedule",
+            "Temperature doesn't matter; adjust based on recipe"
+          ],
+          "distractorSource": [
+            "Room temperature doesn't affect fermentation rate",
+            "All sourdough is baked on a strict timeline",
+            null,
+            "Timing is flexible regardless of temperature"
+          ]
+        }
+      },
+      {
+        "id": "k2",
+        "label": "Choose and maintain a starter with appropriate strength",
         "type": "procedure",
-        "cluster": "Get a starter to peak",
+        "cluster": "Starter Management",
         "level": "apply",
         "requires": [],
         "misconceptions": [
-          "a starter is ready whenever it has bubbles",
-          "a starter that has collapsed is dead"
+          "All starters have the same feeding routine",
+          "A starter's feeding schedule doesn't affect bread structure",
+          "Starters don't need to be active to bake"
         ],
         "check": {
-          "kc": "s1",
-          "level": "apply",
+          "answerIndex": 3,
+          "kc": "k2",
+          "level": "understand",
           "kind": "mcq",
-          "stem": "Your starter rose, domed, and has just begun to sink. It is…",
+          "stem": "What role does maintaining an active starter play in sourdough baking?",
           "options": [
-            "just past peak — usable, but ferment will run faster",
-            "dead and needs replacing",
-            "not ready, wait for more bubbles",
-            "ready only once it stops moving"
+            "All feeding routines are the same",
+            "Starter activity doesn't affect the outcome",
+            "Inactive starters can still bake perfectly",
+            "An active starter helps ensure proper rise and crumb structure"
           ],
-          "answerIndex": 0,
           "distractorSource": [
-            null,
-            "a starter that has collapsed is dead",
-            "a starter is ready whenever it has bubbles",
-            "a starter is ready whenever it has bubbles"
+            "All starters have the same feeding routine",
+            "A starter's feeding schedule doesn't affect bread structure",
+            "Starters don't need to be active to bake",
+            null
           ]
         }
       },
       {
-        "id": "s2",
-        "label": "Mix flour and water and let it hydrate before adding starter",
+        "id": "k3",
+        "label": "Mix and knead dough to develop gluten structure",
         "type": "procedure",
-        "cluster": "Get a starter to peak",
+        "cluster": "Dough Preparation",
         "level": "apply",
         "requires": [
-          "s1"
+          "k2"
         ],
         "misconceptions": [
-          "everything should go in at once",
-          "longer autolyse is always better"
+          "Kneading isn't necessary for sourdough",
+          "The more kneading, the better the bread",
+          "Gluten doesn't need development in sourdough"
         ],
         "check": {
-          "kc": "s2",
-          "level": "apply",
-          "kind": "mcq",
-          "stem": "Why hold back the starter and salt at first?",
-          "options": [
-            "the flour hydrates and gluten starts forming without fermentation running",
-            "it makes the dough rise faster",
-            "it is only tradition",
-            "salt would not dissolve otherwise"
-          ],
           "answerIndex": 0,
+          "kc": "k3",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "Why is it important to develop gluten in sourdough dough?",
+          "options": [
+            "Proper gluten development is crucial for structure and crumb",
+            "Gluten development doesn't matter",
+            "Kneading is unnecessary",
+            "More kneading always improves bread"
+          ],
           "distractorSource": [
             null,
-            "everything should go in at once",
-            "everything should go in at once",
-            "longer autolyse is always better"
+            "Gluten doesn't need development in sourdough",
+            "Kneading isn't necessary for sourdough",
+            "The more kneading, the better the bread"
           ]
         }
       },
       {
-        "id": "s3",
-        "label": "Judge bulk fermentation by how the dough behaves, not by the clock",
+        "id": "k4",
+        "label": "Shape dough correctly for final proof",
+        "type": "procedure",
+        "cluster": "Dough Shaping",
+        "level": "apply",
+        "requires": [
+          "k3"
+        ],
+        "misconceptions": [
+          "Shaping is only about appearance",
+          "Over-handling dough doesn't impact final loaf",
+          "Shaping procedures are universally identical"
+        ],
+        "check": {
+          "answerIndex": 1,
+          "kc": "k4",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What is the purpose of correctly shaping sourdough?",
+          "options": [
+            "It's only for looks",
+            "Proper shaping helps maintain structure and even baking",
+            "Handling doesn't affect outcome",
+            "One shaping method fits all"
+          ],
+          "distractorSource": [
+            "Shaping is only about appearance",
+            null,
+            "Over-handling dough doesn't impact final loaf",
+            "Shaping procedures are universally identical"
+          ]
+        }
+      },
+      {
+        "id": "k5",
+        "label": "Bake the loaf at the correct temperature and time",
+        "type": "procedure",
+        "cluster": "Baking Process",
+        "level": "apply",
+        "requires": [
+          "k1",
+          "k4"
+        ],
+        "misconceptions": [
+          "All breads bake at the same temperature",
+          "Baking time won't affect loaf texture",
+          "Oven temperature doesn't need strict control"
+        ],
+        "check": {
+          "answerIndex": 2,
+          "kc": "k5",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "Why is it important to bake sourdough at specific temperatures and times?",
+          "options": [
+            "Baking temperature is universally the same",
+            "Time doesn't impact loaf texture",
+            "Correct baking ensures proper texture and crust development",
+            "Strict temperature control is unnecessary"
+          ],
+          "distractorSource": [
+            "All breads bake at the same temperature",
+            "Baking time won't affect loaf texture",
+            null,
+            "Oven temperature doesn't need strict control"
+          ]
+        }
+      },
+      {
+        "id": "k6",
+        "label": "Analyze crumb texture and diagnose potential issues",
         "type": "principle",
-        "cluster": "Read the bulk ferment",
+        "cluster": "Troubleshooting",
         "level": "analyze",
         "requires": [
-          "s2"
+          "k2",
+          "k3",
+          "k4",
+          "k5"
         ],
         "misconceptions": [
-          "a recipe's timing works in any kitchen",
-          "doubling in size is the target for bulk"
+          "A tight crumb is unavoidable in sourdough",
+          "Crumb issues are always due to starter",
+          "Dough hydration doesn't affect crumb openness"
         ],
         "check": {
-          "kc": "s3",
+          "answerIndex": 3,
+          "kc": "k6",
           "level": "analyze",
           "kind": "mcq",
-          "stem": "The recipe says four hours. Your kitchen is 28°C. You should…",
+          "stem": "What are possible reasons for a tight crumb in a sourdough loaf?",
           "options": [
-            "watch the dough — it will be ready well before four hours",
-            "follow the four hours as written",
-            "add an hour to be safe",
-            "refrigerate until four hours have passed"
+            "Tight crumb is inevitable",
+            "It's always due to the starter",
+            "Hydration doesn't matter",
+            "Under-proofing, insufficient kneading, or low hydration can cause tight crumb"
           ],
-          "answerIndex": 0,
           "distractorSource": [
-            null,
-            "a recipe's timing works in any kitchen",
-            "a recipe's timing works in any kitchen",
-            "doubling in size is the target for bulk"
-          ]
-        }
-      },
-      {
-        "id": "s4",
-        "label": "Build strength with folds instead of kneading",
-        "type": "procedure",
-        "cluster": "Read the bulk ferment",
-        "level": "apply",
-        "requires": [
-          "s2"
-        ],
-        "misconceptions": [
-          "more folding always means more structure",
-          "folding is a substitute for fermentation"
-        ],
-        "check": {
-          "kc": "s4",
-          "level": "apply",
-          "kind": "mcq",
-          "stem": "When should you stop folding?",
-          "options": [
-            "once the dough holds its shape and feels airy",
-            "after a fixed number of folds regardless",
-            "when it stops being sticky",
-            "never — keep folding until shaping"
-          ],
-          "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "more folding always means more structure",
-            "folding is a substitute for fermentation",
-            "more folding always means more structure"
-          ]
-        }
-      },
-      {
-        "id": "s5",
-        "label": "Shape with enough tension to hold a rise",
-        "type": "procedure",
-        "cluster": "Shape and prove",
-        "level": "apply",
-        "requires": [
-          "s3",
-          "s4"
-        ],
-        "misconceptions": [
-          "tighter shaping is always better",
-          "degassing completely is required before shaping"
-        ],
-        "check": {
-          "kc": "s5",
-          "level": "apply",
-          "kind": "mcq",
-          "stem": "What are you trying to achieve when shaping?",
-          "options": [
-            "a taut skin, with the gas inside largely kept",
-            "to press out every bubble first",
-            "the tightest ball you can manage",
-            "a flat disc that will spread in the oven"
-          ],
-          "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "degassing completely is required before shaping",
-            "tighter shaping is always better",
-            "tighter shaping is always better"
-          ]
-        }
-      },
-      {
-        "id": "s6",
-        "label": "Tell an under-proved loaf from an over-proved one by the poke test",
-        "type": "principle",
-        "cluster": "Shape and prove",
-        "level": "analyze",
-        "requires": [
-          "s5"
-        ],
-        "misconceptions": [
-          "a dough that springs back fast is ready",
-          "over-proved and under-proved look the same from outside"
-        ],
-        "check": {
-          "kc": "s6",
-          "level": "analyze",
-          "kind": "mcq",
-          "stem": "You poke it and the dent springs back immediately. The dough is…",
-          "options": [
-            "under-proved — give it longer",
-            "ready to bake",
-            "over-proved — bake at once",
-            "ruined"
-          ],
-          "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "a dough that springs back fast is ready",
-            "over-proved and under-proved look the same from outside",
-            "over-proved and under-proved look the same from outside"
-          ]
-        }
-      },
-      {
-        "id": "s7",
-        "label": "Bake with steam first, then dry heat",
-        "type": "procedure",
-        "cluster": "Bake it",
-        "level": "apply",
-        "requires": [
-          "s6"
-        ],
-        "misconceptions": [
-          "steam matters for the whole bake",
-          "a hotter oven always gives more rise"
-        ],
-        "check": {
-          "kc": "s7",
-          "level": "apply",
-          "kind": "mcq",
-          "stem": "Why lift the lid partway through?",
-          "options": [
-            "the crust needs to dry and colour once the rise is done",
-            "to check on it",
-            "to let the loaf cool a little",
-            "steam is only needed at the end"
-          ],
-          "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "steam matters for the whole bake",
-            "a hotter oven always gives more rise",
-            "steam matters for the whole bake"
-          ]
-        }
-      },
-      {
-        "id": "s8",
-        "label": "Read the finished crumb backwards to the stage that caused it",
-        "type": "principle",
-        "cluster": "Diagnose the crumb",
-        "level": "analyze",
-        "requires": [
-          "s7",
-          "s3",
-          "s6"
-        ],
-        "misconceptions": [
-          "a dense crumb always means the starter was weak",
-          "crumb problems are fixed by changing the recipe rather than the timing"
-        ],
-        "check": {
-          "kc": "s8",
-          "level": "analyze",
-          "kind": "mcq",
-          "stem": "Tight crumb, pale crust, and it spread flat on the tray. The likeliest cause is…",
-          "options": [
-            "over-fermented — the structure gave out before the bake",
-            "under-fermented — it needed longer in bulk",
-            "the oven was too cool",
-            "the flour was wrong"
-          ],
-          "answerIndex": 0,
-          "distractorSource": [
-            null,
-            "a dense crumb always means the starter was weak",
-            "crumb problems are fixed by changing the recipe rather than the timing",
-            "a dense crumb always means the starter was weak"
+            "A tight crumb is unavoidable in sourdough",
+            "Crumb issues are always due to starter",
+            "Dough hydration doesn't affect crumb openness",
+            null
           ]
         }
       }
     ],
     "clusters": [
       {
-        "title": "Get a starter to peak",
-        "summary": "A living starter, and a dough mixed in the right order.",
+        "title": "Scheduling and Timing",
+        "summary": "Understanding the effect of timing and temperature on sourdough.",
         "kcs": [
-          "s1",
-          "s2"
+          "k1"
         ]
       },
       {
-        "title": "Read the bulk ferment",
-        "summary": "Judging the dough by feel while building its strength.",
+        "title": "Starter Management",
+        "summary": "Maintaining an appropriate starter for baking.",
         "kcs": [
-          "s3",
-          "s4"
+          "k2"
         ]
       },
       {
-        "title": "Shape and prove",
-        "summary": "Tension, then knowing when it is ready for the oven.",
+        "title": "Dough Preparation",
+        "summary": "Learning how to properly mix and knead dough for gluten development.",
         "kcs": [
-          "s5",
-          "s6"
+          "k3"
         ]
       },
       {
-        "title": "Bake it",
-        "summary": "Steam for the rise, dry heat for the crust.",
+        "title": "Dough Shaping",
+        "summary": "Properly shaping dough for final baking.",
         "kcs": [
-          "s7"
+          "k4"
         ]
       },
       {
-        "title": "Diagnose the crumb",
-        "summary": "Working backwards from the slice to the stage that caused it.",
+        "title": "Baking Process",
+        "summary": "Executing the baking stage correctly.",
         "kcs": [
-          "s8"
+          "k5"
+        ]
+      },
+      {
+        "title": "Troubleshooting",
+        "summary": "Analyzing and diagnosing issues in sourdough baking.",
+        "kcs": [
+          "k6"
         ]
       }
     ],
     "capstoneRequires": [
-      "s8"
+      "k6"
     ]
   }
 }

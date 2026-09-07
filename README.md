@@ -7,11 +7,10 @@
 > by a socket contract, and `public/` should be rebuilt on it. See
 > [poc/README.md](poc/README.md) and section 5 of [CHALLENGES.md](CHALLENGES.md).
 >
-> **The curriculum** is newly rebuilt on standard instructional design and is
-> headless-verifiable — but it has never been run against a real API. Two of the
-> five fixtures were written cold from the prompts; the rest were authored
-> knowing what the validator wanted. See
-> [What isn't built yet](#what-isnt-built-yet).
+> **The curriculum** is newly rebuilt on standard instructional design, verified
+> headlessly, and now runs against a real model — the committed fixtures are
+> recorded `gpt-4o` output. What it produces has never been read by a learner.
+> See [What isn't built yet](#what-isnt-built-yet).
 
 **Type a goal. Walk the path. Reach the summit.**
 
@@ -89,11 +88,16 @@ The validator rejects a syllabus with a hole (an atom required but never
 taught), a redundancy (taught twice), scope creep (an atom the capstone never
 needs), an overloaded platform, an unexamined atom, a check pitched above what
 its platform taught, a summit that never reaches the level the goal asked for, a
-capstone that names no atoms at all, a distractor not drawn from a named
-misconception, an edge no shared atom justifies, a circular prerequisite, or a
-junction wider than the world can render legibly. When it rejects one, the
-pipeline hands the specific complaints back to the model and retries once
-before falling back.
+capstone that names no atoms at all, a decomposition too thin to be a course, a
+distractor not drawn from a named misconception, an edge no shared atom
+justifies, a circular prerequisite, a junction with more ways out than a court
+has sides, or — the one that matters most — **a world with no platform you can
+start on**. A model can group a perfectly acyclic set of atoms into platforms
+that wait on each other, and every other rule passes it.
+
+When it rejects a syllabus, the pipeline hands the specific complaints back to
+the model and retries once before falling back. On a live five-topic run, three
+of the five were rescued that way.
 
 `check.mjs` also reports the *shape* of each world — platforms, roots, forks,
 joins, longest path — because a valley with no junctions is a corridor, and
@@ -119,33 +123,30 @@ that's a quality signal no single assertion catches.
   the summit stays a ghost on the horizon.
 - **Forks asked at the fork** — she walks out to the junction before asking.
 - **Six chapter palettes**, chosen deterministically from your topic.
-- **A curriculum that can be argued with** — 53 unit tests, 36 end-to-end
-  assertions over five fixture topics, all headless.
+- **A curriculum that can be argued with** — 70 unit tests, 31 end-to-end
+  assertions over five recorded topics, all headless.
 - **Zero npm dependencies** — one Node file, vanilla JS frontend, `node:test`.
 
 ---
 
 ## What isn't built yet
 
-**`gpt-4o-mini` is not up to writing the curriculum.** Three live runs, and it
-never once produced a syllabus the validator would accept across all five
-topics. Asked for 6–16 atoms it returned three or four; asked for concrete
-cluster titles it returned "Economic Factors, Political Factors, Ideological
-Factors"; asked to vary Bloom levels it flattened everything to "understand".
-The checks it wrote put the correct answer at option A every single time.
+**The model matters more than anything else here.** `gpt-4o-mini` passes one
+topic in five: asked for 6–16 atoms it returns four, asked for concrete cluster
+titles it returns "Economic Factors, Political Factors, Ideological Factors",
+asked to vary Bloom levels it flattens everything to "understand". `gpt-4o`
+passes all five. Set `OPENAI_MODEL=gpt-4o` — the default is not good enough.
 
-That is not all the model's fault, and the runs were worth their cost — they
-found four faults on our side, since fixed: a parallel `distractorSource` array
-that asked the model to hold positional correspondence across two lists (it
-numbered the options instead, every time), no instruction that the course must
-reach the goal's own level, no clamp stopping a check outrunning the atom it
-tests, and nothing at all enforcing the atom count the prompt asks for.
+**Runs vary a lot.** Two `gpt-4o` runs over the same five topics with the same
+prompts scored 4/5 and 2/5 before the last round of fixes, and 5/5 after. Treat
+a single run as an anecdote. The retry is doing real work: three of the five
+were rejected first time and rescued second.
 
-**Whether a stronger model clears the bar is still unknown**, and it is the next
-thing to find out. The committed fixtures are hand-authored; `--live` re-records
-them from a real model. What the validator does is settled — it rejected every
-bad decomposition and no learner ever saw one. What a model in the wild produces
-is not.
+**Nobody has read a generated lesson.** The pipeline proves a syllabus is
+well-structured — no gaps, no redundancy, nothing off-topic, no step too big,
+every platform reachable. It cannot prove anything in it is *true*, and no
+human has yet sat down and walked one to see whether it teaches. That is the
+next thing to find out, and no amount of assertion will answer it.
 
 **No adaptation.** Everyone still gets the same valley. The schema is built for
 it — `pack()` already takes a set of atoms the learner holds and re-derives a
@@ -161,9 +162,8 @@ any of it stick.
 front end still posts a bare topic, and the server takes it at face value —
 which skips backward design's first stage, the one that does the most work.
 
-**Content is still unverified.** The pipeline can prove a syllabus is
-*well-structured* — no gaps, no redundancy, nothing off-topic, no step too big.
-It cannot prove anything in it is *true*. No sources, no citations, no grounding.
+**Nothing is grounded.** No sources, no citations. A confident wrong statement
+passes every assertion here.
 
 **One check per platform reaches the renderer.** The syllabus holds one question
 per atom; `public/` reads one per platform, so the rest are carried but unused

@@ -10,8 +10,12 @@
 export const LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
 const rank = (l) => LEVELS.indexOf(l);
 
-/** A junction wider than this cannot be read as a fork in the isometric world. */
-export const MAX_BRANCH = 3;
+/* A court has a socket at the midpoint of every boundary cell edge and "can
+ * accept a path from any side" (poc/slices.js), so four is the number of
+ * distinct directions a path can leave a platform in. An earlier 3 here was
+ * invented rather than derived, and rejected curricula the world renders
+ * perfectly well. */
+export const MAX_BRANCH = 4;
 
 export function validate(doc) {
   const errors = [];
@@ -167,6 +171,27 @@ export function validate(doc) {
     fail('summit-below-goal',
       `the summit teaches to "${summit.objective?.level}" but the goal asks for "${doc.goal.level}"`,
       summit.id);
+  }
+
+  // Knowledge space theory's well-gradedness, and the assertion that matters
+  // most: from a standing start there must always be some platform whose
+  // prerequisites are met, until the whole world is walked. A model can group
+  // a perfectly acyclic set of atoms into platforms that wait on each other —
+  // acyclic atoms, circular platforms — and every other rule here passes it.
+  // The result is a valley with no way in.
+  const held = new Set(assumed);
+  const walked = new Set();
+  for (;;) {
+    const next = doc.nodes.find((n) => !walked.has(n.id) && n.requires.every((k) => held.has(k)));
+    if (!next) break;
+    walked.add(next.id);
+    next.teaches.forEach((k) => held.add(k));
+  }
+  if (walked.size !== doc.nodes.length) {
+    const stuck = doc.nodes.filter((n) => !walked.has(n.id)).map((n) => n.id);
+    fail('unreachable-platform',
+      `${stuck.length} of ${doc.nodes.length} platforms can never be reached: ${stuck.join(', ')}`,
+      stuck[0]);
   }
 
   // A junction with too many ways out cannot be read as a fork.
