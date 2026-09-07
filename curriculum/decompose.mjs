@@ -12,7 +12,11 @@ import { LEVELS } from './validate.mjs';
  * misconceptions and a four-option check, runs comfortably past 3,000 tokens.
  * Budget for the largest decomposition the prompt permits, not the smallest —
  * a truncated response is unparseable, and costs a whole call to discover. */
-export const DECOMPOSE_TOKENS = 8000;
+/* Overridable, because some providers reserve max_tokens against the account
+ * balance up front and refuse a large request outright — reported, unhelpfully,
+ * as "no credits remaining". Lower it to fit a small balance; the truncation
+ * warning will tell you when you have gone too low. */
+export const DECOMPOSE_TOKENS = Number(process.env.DECOMPOSE_MAX_TOKENS) || 8000;
 
 export const DECOMPOSE_SYSTEM =
   'You decompose a learning goal into its knowledge components. Output ONLY valid JSON. No markdown, no prose.';

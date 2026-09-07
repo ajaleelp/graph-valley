@@ -8,105 +8,186 @@
   },
   "capstone": {
     "prompt": "A friend says the Revolution happened because the people were hungry. What is right about that, and what does it leave out?",
-    "rubric": ["separates trigger from cause", "names the constitutional crisis", "does not reduce it to bread alone"],
-    "requires": ["f7"]
+    "rubric": [
+      "separates trigger from cause",
+      "names the constitutional crisis",
+      "does not reduce it to bread alone"
+    ],
+    "requires": [
+      "k1",
+      "k2",
+      "k3",
+      "k4"
+    ]
   },
   "response": {
     "spine": "concept",
-    "assumed": ["that France was a monarchy", "roughly where 1789 sits in time"],
+    "assumed": [],
     "kcs": [
       {
-        "id": "f1", "label": "France was divided into three estates, and only the third paid most taxes",
-        "type": "concept", "cluster": "Who paid for France", "level": "understand", "requires": [],
-        "misconceptions": ["the third estate was only the poor", "the estates were about wealth rather than legal status"],
+        "id": "k1",
+        "label": "The economic situation of France in 1789 contributed to civil unrest.",
+        "type": "fact",
+        "cluster": "Economic Factors",
+        "level": "understand",
+        "requires": [],
+        "misconceptions": [
+          "The French Revolution was solely caused by food shortages.",
+          "Economic factors were not significant in the lead-up to the Revolution.",
+          "The people's hunger was the only reason for the storming of the Bastille."
+        ],
         "check": {
-          "kc": "f1", "level": "understand", "kind": "mcq",
-          "stem": "A wealthy Parisian lawyer in 1789 belonged to…",
-          "options": ["the third estate", "the second estate, because he was rich", "no estate", "whichever estate he paid to join"],
+          "kc": "k1",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What contributed to civil unrest in France before the Revolution?",
+          "options": [
+            "The economic situation of France in 1789",
+            "Food shortages alone",
+            "Discontent with the monarchy",
+            "Social inequality"
+          ],
           "answerIndex": 0,
-          "distractorSource": [null, "the estates were about wealth rather than legal status", "the third estate was only the poor", "the estates were about wealth rather than legal status"]
+          "distractorSource": [
+            null,
+            "The French Revolution was solely caused by food shortages.",
+            "Economic factors were not significant in the lead-up to the Revolution.",
+            "The people's hunger was the only reason for the storming of the Bastille."
+          ]
         }
       },
       {
-        "id": "f2", "label": "The crown was bankrupt after decades of foreign war",
-        "type": "fact", "cluster": "Who paid for France", "level": "remember", "requires": [],
-        "misconceptions": ["the debt came from royal luxury alone", "France was poor overall rather than badly financed"],
+        "id": "k2",
+        "label": "The impact of the Estates-General meeting in May 1789 on public perception.",
+        "type": "fact",
+        "cluster": "Political Factors",
+        "level": "understand",
+        "requires": [
+          "k1"
+        ],
+        "misconceptions": [
+          "The Estates-General was a plan to improve conditions that everyone supported.",
+          "No important decisions were made during the Estates-General.",
+          "The common people were not involved or informed about the Estates-General."
+        ],
         "check": {
-          "kc": "f2", "level": "remember", "kind": "mcq",
-          "stem": "The crown's debt in the 1780s came mainly from…",
-          "options": ["war, including backing the American revolution", "the court's spending at Versailles", "a collapse in French farming", "loans to other kings"],
+          "kc": "k2",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What was the outcome of the Estates-General meeting in May 1789?",
+          "options": [
+            "It fueled public discontent and expectations",
+            "It resolved all issues facing France",
+            "It had no impact on the Revolution",
+            "It was a consensus meeting of all classes"
+          ],
           "answerIndex": 0,
-          "distractorSource": [null, "the debt came from royal luxury alone", "France was poor overall rather than badly financed", "the debt came from royal luxury alone"]
+          "distractorSource": [
+            null,
+            "The Estates-General was a plan to improve conditions that everyone supported.",
+            "No important decisions were made during the Estates-General.",
+            "The common people were not involved or informed about the Estates-General."
+          ]
         }
       },
       {
-        "id": "f3", "label": "The Estates-General voted by estate, so the third could always be outvoted two to one",
-        "type": "concept", "cluster": "The voting problem", "level": "understand", "requires": ["f1"],
-        "misconceptions": ["each delegate had one vote", "the king could simply overrule the outcome"],
+        "id": "k3",
+        "label": "The influence of Enlightenment ideas on revolutionary sentiment.",
+        "type": "fact",
+        "cluster": "Ideological Factors",
+        "level": "understand",
+        "requires": [
+          "k1"
+        ],
+        "misconceptions": [
+          "Enlightenment ideas had no relevance to the Revolution.",
+          "Only peasants were influenced by Enlightenment thinking.",
+          "All Enlightenment philosophers supported the monarchy."
+        ],
         "check": {
-          "kc": "f3", "level": "understand", "kind": "mcq",
-          "stem": "Why did voting by estate matter so much in 1789?",
-          "options": ["the third estate could always be outvoted two to one", "the king held the deciding vote", "each delegate voted individually", "the second estate had no vote"],
+          "kc": "k3",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "How did Enlightenment ideas influence revolutionary sentiment?",
+          "options": [
+            "They encouraged people to challenge traditional authority",
+            "They promoted absolute monarchy",
+            "They suggested that the status quo should remain the same",
+            "They were only popular among the nobility"
+          ],
           "answerIndex": 0,
-          "distractorSource": [null, "the king could simply overrule the outcome", "each delegate had one vote", "each delegate had one vote"]
+          "distractorSource": [
+            null,
+            "Enlightenment ideas had no relevance to the Revolution.",
+            "Only peasants were influenced by Enlightenment thinking.",
+            "All Enlightenment philosophers supported the monarchy."
+          ]
         }
       },
       {
-        "id": "f4", "label": "The third estate declared itself the National Assembly and swore not to disband",
-        "type": "concept", "cluster": "The break with the king", "level": "understand", "requires": ["f1", "f3"],
-        "misconceptions": ["the Tennis Court Oath was a violent act", "the Assembly was created by the king"],
+        "id": "k4",
+        "label": "The role of the monarchy in escalating tensions leading to 1789.",
+        "type": "fact",
+        "cluster": "Political Factors",
+        "level": "understand",
+        "requires": [
+          "k2"
+        ],
+        "misconceptions": [
+          "The monarchy was widely beloved and supported throughout France.",
+          "Louis XVI had no impact on the events leading up to the Revolution.",
+          "The monarchy's decisions were always in favor of the people."
+        ],
         "check": {
-          "kc": "f4", "level": "understand", "kind": "mcq",
-          "stem": "The Tennis Court Oath was significant because it…",
-          "options": ["claimed authority the king had not granted", "was the first armed uprising", "was called by the king himself", "ended the monarchy"],
+          "kc": "k4",
+          "level": "understand",
+          "kind": "mcq",
+          "stem": "What role did the monarchy play in the events leading to 1789?",
+          "options": [
+            "It escalated tensions through unpopular decisions",
+            "It reduced tensions with positive reforms",
+            "It had no influence on the events",
+            "It was solely responsible for food shortages"
+          ],
           "answerIndex": 0,
-          "distractorSource": [null, "the Tennis Court Oath was a violent act", "the Assembly was created by the king", "the Tennis Court Oath was a violent act"]
-        }
-      },
-      {
-        "id": "f5", "label": "A failed harvest sent bread prices to their highest point of the century",
-        "type": "fact", "cluster": "Hunger in the streets", "level": "understand", "requires": ["f2"],
-        "misconceptions": ["hunger alone explains the Revolution", "the shortage was engineered by the nobility"],
-        "check": {
-          "kc": "f5", "level": "understand", "kind": "mcq",
-          "stem": "By July 1789 a Paris worker spent roughly what share of wages on bread?",
-          "options": ["most of them", "about a tenth", "none — bread was subsidised", "it varied by estate"],
-          "answerIndex": 0,
-          "distractorSource": [null, "hunger alone explains the Revolution", "the shortage was engineered by the nobility", "the shortage was engineered by the nobility"]
-        }
-      },
-      {
-        "id": "f6", "label": "The Bastille was stormed for gunpowder, amid fear the king would crush the Assembly",
-        "type": "principle", "cluster": "The Bastille", "level": "analyze", "requires": ["f4", "f5"],
-        "misconceptions": ["it was stormed to free its prisoners", "it was a spontaneous hunger riot with no political aim"],
-        "check": {
-          "kc": "f6", "level": "analyze", "kind": "mcq",
-          "stem": "The crowd went to the Bastille chiefly for…",
-          "options": ["gunpowder, fearing troops would move on the Assembly", "the prisoners held inside", "bread stored in its cellars", "no particular reason — it was a riot"],
-          "answerIndex": 0,
-          "distractorSource": [null, "it was stormed to free its prisoners", "it was a spontaneous hunger riot with no political aim", "it was a spontaneous hunger riot with no political aim"]
-        }
-      },
-      {
-        "id": "f7", "label": "Trigger and cause are different things, and the storming was a trigger",
-        "type": "principle", "cluster": "Trigger and cause", "level": "analyze", "requires": ["f6"],
-        "misconceptions": ["the event that starts something is its cause", "a single explanation is enough for a revolution"],
-        "check": {
-          "kc": "f7", "level": "analyze", "kind": "mcq",
-          "stem": "Calling the storming a trigger rather than a cause means…",
-          "options": ["it released pressure that had built up elsewhere", "it was unimportant", "it was the sole reason", "causes and triggers are the same thing"],
-          "answerIndex": 0,
-          "distractorSource": [null, "a single explanation is enough for a revolution", "the event that starts something is its cause", "the event that starts something is its cause"]
+          "distractorSource": [
+            null,
+            "The monarchy was widely beloved and supported throughout France.",
+            "Louis XVI had no impact on the events leading up to the Revolution.",
+            "The monarchy's decisions were always in favor of the people."
+          ]
         }
       }
     ],
     "clusters": [
-      { "title": "Who paid for France", "summary": "The legal divide, and the debt that made it matter.", "kcs": ["f1", "f2"] },
-      { "title": "The voting problem", "summary": "Why the Estates-General could not resolve anything.", "kcs": ["f3"] },
-      { "title": "The break with the king", "summary": "The moment the third estate claimed authority.", "kcs": ["f4"] },
-      { "title": "Hunger in the streets", "summary": "What the debt meant for the price of bread.", "kcs": ["f5"] },
-      { "title": "The Bastille", "summary": "Why a fortress, and why that week.", "kcs": ["f6"] },
-      { "title": "Trigger and cause", "summary": "Telling the spark apart from the fuel.", "kcs": ["f7"] }
+      {
+        "title": "Economic Factors",
+        "summary": "Economic conditions led to widespread dissatisfaction.",
+        "kcs": [
+          "k1"
+        ]
+      },
+      {
+        "title": "Political Factors",
+        "summary": "Political discontent fueled revolutionary actions.",
+        "kcs": [
+          "k2",
+          "k4"
+        ]
+      },
+      {
+        "title": "Ideological Factors",
+        "summary": "New ideas inspired calls for change.",
+        "kcs": [
+          "k3"
+        ]
+      }
+    ],
+    "capstoneRequires": [
+      "k1",
+      "k2",
+      "k3",
+      "k4"
     ]
   }
 }

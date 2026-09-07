@@ -99,7 +99,10 @@ async function verify(name, fixture) {
   const shape = shapeOf(doc);
   check(`${name}: no junction wider than the world can render`, shape.widest <= MAX_BRANCH, `widest ${shape.widest}`);
 
-  return shape;
+  // Say which world this actually describes. When a decomposition is rejected
+  // the document is the built-in generator's, and reporting its shape as the
+  // model's would flatter a run that in fact produced nothing usable.
+  return { ...shape, source: built.source };
 }
 
 /* ------------------------------- run -------------------------------- */
@@ -115,10 +118,18 @@ for (const file of files) {
     const { llm } = await import('./llm.mjs');
     check(`${name}: --live needs a model key`, !!llm);
     if (llm) {
-      const spec = await decompose({ ...fixture, spine: fixture.response.spine, llm });
-      if (spec) {
-        fixture.response = { spine: spec.spine, assumed: spec.assumed, kcs: spec.kcs, clusters: spec.clusters };
-        await writeFile(join(DIR, file), `${JSON.stringify(fixture, null, 2)}\n`);
+      try {
+        const spec = await decompose({ ...fixture, spine: fixture.response.spine, llm });
+        if (check(`${name}: the model returned something usable`, !!spec)) {
+          fixture.response = {
+            spine: spec.spine, assumed: spec.assumed, kcs: spec.kcs,
+            clusters: spec.clusters, capstoneRequires: spec.capstone.requires,
+          };
+          fixture.capstone = { ...fixture.capstone, requires: spec.capstone.requires };
+          await writeFile(join(DIR, file), `${JSON.stringify(fixture, null, 2)}\n`);
+        }
+      } catch (e) {
+        check(`${name}: the model call reached the model`, false, e.message.replace(/\s+/g, ' ').slice(0, 120));
       }
     }
   }
@@ -134,16 +145,23 @@ check('fallback: the built-in generator validates', validate(built).ok,
 /* ------------------------------ report ------------------------------- */
 
 console.log('\nShape of each world\n');
-console.log('  topic                      platforms  atoms  roots  forks  joins  longest');
+console.log('  topic                      platforms  atoms  roots  forks  joins  longest  from');
 for (const [name, s] of shapes) {
   console.log(
     `  ${name.padEnd(26)} ${String(s.platforms).padStart(6)} ${String(s.atoms).padStart(6)} ` +
     `${String(s.roots).padStart(6)} ${String(s.forks).padStart(6)} ${String(s.joins).padStart(6)} ` +
-    `${String(s.longest).padStart(8)}`,
+    `${String(s.longest).padStart(8)}  ${s.source}`,
   );
 }
 
-const corridors = shapes.filter(([, s]) => s.forks === 0 && s.platforms > 3);
+const fellBack = shapes.filter(([, s]) => s.source === 'fallback');
+if (fellBack.length) {
+  console.log(`\n  ${fellBack.length}/${shapes.length} fell back: ${fellBack.map(([n]) => n).join(', ')}.`);
+  console.log('  Those rows describe the built-in generator, not the model. The model produced');
+  console.log('  nothing usable for them — see the failures below for what it got wrong.');
+}
+
+const corridors = shapes.filter(([, s]) => s.source !== 'fallback' && s.forks === 0 && s.platforms > 3);
 if (corridors.length) {
   console.log(`\n  Note: ${corridors.map(([n]) => n).join(', ')} came out as a corridor — no junctions.`);
   console.log('  Not a failure, but a valley with nothing to choose is a list with scenery.');
