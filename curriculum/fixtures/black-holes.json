@@ -1,0 +1,123 @@
+{
+  "topic": "how black holes work",
+  "goal": {
+    "statement": "Explain to a friend why light cannot escape a black hole, and roughly where the boundary sits.",
+    "level": "understand",
+    "audience": "a curious adult, no physics past school"
+  },
+  "capstone": {
+    "prompt": "The Sun weighs about 2e30 kg. If it collapsed, how wide would its boundary be — and why won't it?",
+    "rubric": ["names the mass-over-radius relationship", "uses light speed as the limit", "separates mass from density"],
+    "requires": ["k8"]
+  },
+  "response": {
+    "spine": "concept",
+    "assumed": ["speed, distance and time in everyday terms"],
+    "kcs": [
+      {
+        "id": "k1", "label": "Gravity pulls harder the closer you are to the mass",
+        "type": "principle", "cluster": "Falling and escaping", "level": "understand", "requires": [],
+        "misconceptions": ["gravity switches off in space", "gravity depends only on how big something looks"],
+        "check": {
+          "kc": "k1", "level": "understand", "kind": "mcq",
+          "stem": "You move twice as far from a planet's centre. The pull on you…",
+          "options": ["gets weaker", "stays the same because you are still in its field", "switches off once you leave the atmosphere", "gets stronger because you have more room to fall"],
+          "answerIndex": 0,
+          "distractorSource": [null, "gravity depends only on how big something looks", "gravity switches off in space", "gravity switches off in space"]
+        }
+      },
+      {
+        "id": "k2", "label": "Escape velocity is how fast you must go to get away and never fall back",
+        "type": "concept", "cluster": "Falling and escaping", "level": "understand", "requires": [],
+        "misconceptions": ["any gravity well can be escaped given enough time", "escape velocity is a speed limit rather than a threshold"],
+        "check": {
+          "kc": "k2", "level": "understand", "kind": "mcq",
+          "stem": "A rocket leaves Earth below escape velocity, with its engine off. What happens?",
+          "options": ["it falls back", "it drifts away slowly", "it stops at a fixed height", "it cannot happen — nothing goes that slowly"],
+          "answerIndex": 0,
+          "distractorSource": [null, "any gravity well can be escaped given enough time", "any gravity well can be escaped given enough time", "escape velocity is a speed limit rather than a threshold"]
+        }
+      },
+      {
+        "id": "k3", "label": "Escape velocity rises with more mass and falls with more distance",
+        "type": "principle", "cluster": "What makes escape hard", "level": "understand", "requires": ["k1", "k2"],
+        "misconceptions": ["escape velocity depends on the escaping object's mass", "escape velocity depends on the planet's size rather than its mass"],
+        "check": {
+          "kc": "k3", "level": "understand", "kind": "mcq",
+          "stem": "A feather and a cannonball both leave the same planet's surface. Their escape velocities are…",
+          "options": ["the same", "lower for the feather", "higher for the cannonball", "impossible to compare"],
+          "answerIndex": 0,
+          "distractorSource": [null, "escape velocity depends on the escaping object's mass", "escape velocity depends on the escaping object's mass", "escape velocity depends on the planet's size rather than its mass"]
+        }
+      },
+      {
+        "id": "k4", "label": "Light travels at one fixed speed, about 300,000 km per second",
+        "type": "fact", "cluster": "Light's speed limit", "level": "remember", "requires": [],
+        "misconceptions": ["light speeds up when it is brighter", "light's speed depends on the source's motion"],
+        "check": {
+          "kc": "k4", "level": "remember", "kind": "mcq",
+          "stem": "A torch on a moving train shines forward. The light travels at…",
+          "options": ["its usual speed", "its usual speed plus the train's", "faster because the beam is brighter", "a speed that depends on the train"],
+          "answerIndex": 0,
+          "distractorSource": [null, "light's speed depends on the source's motion", "light speeds up when it is brighter", "light's speed depends on the source's motion"]
+        }
+      },
+      {
+        "id": "k5", "label": "Nothing carrying information can travel faster than light",
+        "type": "principle", "cluster": "Light's speed limit", "level": "understand", "requires": ["k4"],
+        "misconceptions": ["a fast enough rocket could outrun light", "the limit is only about what we can currently build"],
+        "check": {
+          "kc": "k5", "level": "understand", "kind": "mcq",
+          "stem": "Why can't a signal outrun light?",
+          "options": ["nothing carrying information can go faster", "we have not built a fast enough engine", "it can, over short distances", "only light itself is limited"],
+          "answerIndex": 0,
+          "distractorSource": [null, "the limit is only about what we can currently build", "a fast enough rocket could outrun light", "a fast enough rocket could outrun light"]
+        }
+      },
+      {
+        "id": "k6", "label": "Where escape velocity reaches light speed, nothing inside can get out",
+        "type": "principle", "cluster": "The point of no return", "level": "understand", "requires": ["k3", "k5"],
+        "misconceptions": ["the boundary is a solid surface", "you could still escape from inside with a powerful enough engine"],
+        "check": {
+          "kc": "k6", "level": "understand", "kind": "mcq",
+          "stem": "What is special about the radius where escape velocity equals light speed?",
+          "options": ["nothing inside it can get out", "it is a physical shell you could touch", "a strong enough rocket could still leave", "light slows down as it crosses it"],
+          "answerIndex": 0,
+          "distractorSource": [null, "the boundary is a solid surface", "you could still escape from inside with a powerful enough engine", "the boundary is a solid surface"]
+        }
+      },
+      {
+        "id": "k7", "label": "Squeezing the same mass into a smaller ball raises escape velocity at its surface",
+        "type": "principle", "cluster": "Squeeze it smaller", "level": "understand", "requires": ["k3"],
+        "misconceptions": ["squeezing something changes how much mass it has", "only adding mass can raise escape velocity"],
+        "check": {
+          "kc": "k7", "level": "understand", "kind": "mcq",
+          "stem": "A planet shrinks but keeps all its mass. Escape velocity at the new surface…",
+          "options": ["goes up", "stays the same — the mass did not change", "goes down, there is less material to climb past", "depends on how heavy you are"],
+          "answerIndex": 0,
+          "distractorSource": [null, "only adding mass can raise escape velocity", "squeezing something changes how much mass it has", "squeezing something changes how much mass it has"]
+        }
+      },
+      {
+        "id": "k8", "label": "A black hole is mass squeezed inside its own no-escape radius",
+        "type": "concept", "cluster": "What a black hole is", "level": "apply", "requires": ["k6", "k7"],
+        "misconceptions": ["a black hole is a hole, an absence of stuff", "black holes suck things in from any distance"],
+        "check": {
+          "kc": "k8", "level": "apply", "kind": "mcq",
+          "stem": "Swap the Sun for a black hole of exactly the same mass. Earth's orbit…",
+          "options": ["is unchanged", "collapses inward immediately", "widens because a hole has no mass", "is pulled in from any distance"],
+          "answerIndex": 0,
+          "distractorSource": [null, "black holes suck things in from any distance", "a black hole is a hole, an absence of stuff", "black holes suck things in from any distance"]
+        }
+      }
+    ],
+    "clusters": [
+      { "title": "Falling and escaping", "summary": "How gravity behaves as you move away, and what getting away means.", "kcs": ["k1", "k2"] },
+      { "title": "What makes escape hard", "summary": "What escape velocity actually depends on.", "kcs": ["k3"] },
+      { "title": "Light's speed limit", "summary": "The one speed that cannot be beaten.", "kcs": ["k4", "k5"] },
+      { "title": "The point of no return", "summary": "Where the two ideas meet, and a boundary appears.", "kcs": ["k6"] },
+      { "title": "Squeeze it smaller", "summary": "Why density, not mass alone, makes a black hole.", "kcs": ["k7"] },
+      { "title": "What a black hole is", "summary": "Putting the boundary and the squeezing together.", "kcs": ["k8"] }
+    ]
+  }
+}

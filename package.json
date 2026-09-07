@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
+    "test": "node --test 'curriculum/*.test.mjs'",
+    "check": "node curriculum/check.mjs",
     "poc": "node poc/serve.mjs",
     "poc:check": "node poc/check.mjs"
   }

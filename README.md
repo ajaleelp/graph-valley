@@ -1,17 +1,16 @@
 # Graph Valley
 
-> **Work in progress.** The world renderer is real and playable; the teaching is
-> not built yet. See [What isn't built yet](#what-isnt-built-yet) before judging
-> this as a learning tool — right now it is a prototype of an *idea about
-> learning*, not something that will actually teach you anything.
+> **Work in progress.** Two halves, at different stages.
 >
-> **The renderer is also mid-replacement.** `poc/` is a proven, independently
-> verified rebuild of the world as four reusable slice templates stitched by a
-> socket contract, and `public/` should be rebuilt on it — it makes
-> seamlessness and walkability assertable rather than eyeballed, lets paths
-> cross, and fixes depth-sorting bugs the shipped renderer still has. See
-> [poc/README.md](poc/README.md) and section 5 of
-> [CHALLENGES.md](CHALLENGES.md).
+> **The world** is real and playable, and mid-replacement: `poc/` is a proven,
+> independently verified rebuild of it as four reusable slice templates stitched
+> by a socket contract, and `public/` should be rebuilt on it. See
+> [poc/README.md](poc/README.md) and section 5 of [CHALLENGES.md](CHALLENGES.md).
+>
+> **The curriculum** is newly rebuilt on standard instructional design and is
+> headless-verifiable — but it has never been run against a real model. The
+> prompts are unproven and the fixtures are hand-authored stand-ins. See
+> [What isn't built yet](#what-isnt-built-yet).
 
 **Type a goal. Walk the path. Reach the summit.**
 
@@ -26,12 +25,11 @@ shows you none of that.
 
 Graph Valley is an attempt to make that map a **place you walk through**.
 
-You type a free-text goal — "how black holes work", "conversational Japanese",
-"how the stock market works" — and an LLM turns it into a dependency graph:
-prerequisites, concepts, and one capstone. That graph is then rendered as a
-small isometric world in the register of *Monument Valley*: a trail of floating
-stone platforms joined by walkways and stairs, folding back on itself like a
-dungeon map. A traveller walks it.
+You name something you want to be able to do. A pipeline turns it into a
+dependency graph of concepts, and that graph is rendered as a small isometric
+world in the register of *Monument Valley*: a trail of floating stone platforms
+joined by walkways and stairs, folding back on itself like a dungeon map. A
+traveller walks it.
 
 The bet is that **the structure of what you're learning should be the structure
 of the space you move through**:
@@ -48,36 +46,56 @@ this prototype cannot yet answer.
 
 ---
 
-## What isn't built yet
+## How a syllabus is built
 
-**The pedagogy.** That's the honest headline. There is a lesson panel and a
-comprehension check on each platform, but they are scaffolding, not teaching:
+The old pipeline was one LLM call that emitted 8–12 titled nodes with
+hand-waved dependencies. The server could check the result was *well-formed* —
+unique ids, acyclic, one goal — but never that it was *right*.
 
-- **Lessons are one LLM call each**, with no instructional design behind them —
-  no worked examples, no progressive disclosure, no adaptation to what you
-  already know or just got wrong.
-- **Assessment is a single 4-option multiple-choice question** per step,
-  written and marked by the same model that wrote the lesson. It gates
-  progress, which makes it *feel* meaningful, but it does not measure
-  understanding, and it can be trivially guessable or occasionally ambiguous.
-- **No spaced repetition, no retrieval practice, no review.** Once a platform
-  turns gold it stays gold. Nothing brings a concept back later — which is
-  precisely the mechanism most likely to make any of it stick.
-- **Curriculum quality is unverified.** The server checks the *shape* of the
-  LLM's graph — unique ids, real dependencies, acyclic, exactly one goal — and
-  falls back to a built-in generator if the shape is wrong. It has no way to
-  judge whether the curriculum is any good: whether the ordering is sound, the
-  scope sensible, or the content correct. "Learn AI" could legitimately be ten
-  steps or ten thousand, and nothing here decides which.
-- **No level or prior-knowledge input.** Everyone gets the same path for the
-  same topic.
-- **No sources or citations.** Nothing is grounded or checkable.
+The new one composes five standard frameworks into one pass, and the output is
+something a checker can argue with. The reasoning is in
+[docs/plans/2026-09-05-curriculum-pipeline-design.md](docs/plans/2026-09-05-curriculum-pipeline-design.md).
 
-There is also no account system, no persistence beyond `localStorage`, and no
-retention loop of any kind.
+**1 · Fix the summit first.** *(Backward design — Wiggins & McTighe)* A short
+dialogue turns "how black holes work" into one concrete thing you'll be able to
+do, and the assessment that would prove it. This is what bounds scope: "learn
+AI" is unscopeable; "explain why light can't escape, and roughly where the
+boundary sits" is a syllabus of finite length.
 
-So: the world is the part that works. Treat the learning as a placeholder that
-demonstrates the shape of the interaction, and nothing more.
+**2 · Work backwards to the atoms.** *(Learning hierarchies — Gagné; knowledge
+components — Koedinger)* The goal decomposes into the smallest things you either
+know or don't — with, for each, what it needs first, what people commonly get
+wrong about it, and one question that tests it.
+
+**3 · Pack atoms into platforms.** *(Cognitive load — Sweller)* At most three
+new atoms per platform. This step is **pure code, no model** — deterministic,
+unit-tested, and cheap to run again, which is what later lets the world
+re-shape itself around what a learner already knows.
+
+**4 · Derive the edges.** `edge(a → b) ⟺ teaches(a) ∩ requires(b) ≠ ∅`. The
+graph is a projection of the atom declarations, not a second thing to keep in
+sync — the same trick `poc/` pulls with sockets and its nav graph. Forks appear
+where the subject genuinely branches, rather than being sprinkled for variety.
+
+**5 · Assert it.** Curriculum quality stops being something you eyeball.
+
+```
+node curriculum/check.mjs      # or: npm run check
+node --test 'curriculum/*.test.mjs'   # or: npm test
+```
+
+The validator rejects a syllabus with a hole (an atom required but never
+taught), a redundancy (taught twice), scope creep (an atom the capstone never
+needs), an overloaded platform, an unexamined atom, a check pitched above what
+its platform taught, a difficulty level that drops as the path advances, a
+distractor not drawn from a named misconception, an edge no shared atom
+justifies, a circular prerequisite, or a junction wider than the world can
+render legibly. When it rejects one, the pipeline hands the specific complaints
+back to the model and retries once before falling back.
+
+`check.mjs` also reports the *shape* of each world — platforms, roots, forks,
+joins, longest path — because a valley with no junctions is a corridor, and
+that's a quality signal no single assertion catches.
 
 ---
 
@@ -99,7 +117,44 @@ demonstrates the shape of the interaction, and nothing more.
   the summit stays a ghost on the horizon.
 - **Forks asked at the fork** — she walks out to the junction before asking.
 - **Six chapter palettes**, chosen deterministically from your topic.
-- **Zero npm dependencies** — one Node file, vanilla JS frontend.
+- **A curriculum that can be argued with** — 48 unit tests, 22 end-to-end
+  assertions over three fixture topics, all headless.
+- **Zero npm dependencies** — one Node file, vanilla JS frontend, `node:test`.
+
+---
+
+## What isn't built yet
+
+**The curriculum has never met a real model.** Everything above is verified
+against *hand-authored* fixtures — realistic model output that I wrote, not
+output a model produced. `node curriculum/check.mjs --live` calls the real API
+and re-records them, and until someone runs it with a key, the prompts in
+`decompose.mjs` and `negotiate.mjs` are unproven. The structure is sound; whether
+a model will fill it well is untested.
+
+**No adaptation.** Everyone still gets the same valley. The schema is built for
+it — `pack()` already takes a set of atoms the learner holds and re-derives a
+shorter world around them, and `check.mjs` asserts that re-packing stays valid —
+but nothing computes that set yet. No placement check, no mastery estimate, no
+learner state at all beyond `localStorage`.
+
+**No spaced repetition, no review.** Once a platform turns gold it stays gold.
+Nothing brings an atom back later, which is the mechanism most likely to make
+any of it stick.
+
+**No intake UI.** `POST /api/negotiate` exists and works; nothing calls it. The
+front end still posts a bare topic, and the server takes it at face value —
+which skips backward design's first stage, the one that does the most work.
+
+**Content is still unverified.** The pipeline can prove a syllabus is
+*well-structured* — no gaps, no redundancy, nothing off-topic, no step too big.
+It cannot prove anything in it is *true*. No sources, no citations, no grounding.
+
+**One check per platform reaches the renderer.** The syllabus holds one question
+per atom; `public/` reads one per platform, so the rest are carried but unused
+until the renderer catches up.
+
+There is also no account system and no persistence beyond `localStorage`.
 
 ---
 
@@ -114,8 +169,8 @@ npm start
 Then open <http://localhost:3217>. Change the port with `PORT=4000 npm start`.
 
 Without API keys it runs in **demo mode**: a deterministic built-in generator
-produces a 10-node graph and placeholder lessons, and a small `demo` badge shows
-in the HUD. For LLM-generated journeys:
+produces a nine-atom syllabus across four platforms — placeholder content, real
+structure — and a small `demo` badge shows in the HUD. For real journeys:
 
 ```bash
 ANTHROPIC_API_KEY=sk-ant-... npm start
@@ -125,8 +180,8 @@ ANTHROPIC_API_KEY=sk-ant-... npm start
 OPENAI_API_KEY=sk-... npm start
 ```
 
-Override the model with `ANTHROPIC_MODEL` / `OPENAI_MODEL`. Lessons are cached
-in memory per `topic::title`, so repeated lookups don't re-bill.
+Override the model with `ANTHROPIC_MODEL` / `OPENAI_MODEL`. Syllabi and lessons
+are cached in memory, so repeated lookups don't re-bill.
 
 ---
 
@@ -146,33 +201,52 @@ in memory per `topic::title`, so repeated lookups don't re-bill.
 
 | Endpoint | Request | Response |
 |---|---|---|
-| `POST /api/graph` | `{ "topic": "how black holes work" }` | `{ topic, graph: { title, nodes[] }, source }` |
-| `POST /api/node` | `{ topic, title, summary }` | `{ lesson: { content[], check }, source }` |
+| `POST /api/negotiate` | `{ topic, turns[] }` | `{ done: false, ask }` — or `{ done: true, goal, capstone, spine, priors }` |
+| `POST /api/syllabus` | `{ topic, goal?, capstone? }` | `{ topic, syllabus, source }` — atoms, platforms, derived edges, checks |
+| `POST /api/graph` | `{ topic }` | `{ topic, graph, source }` — the syllabus **projected** to the old shape |
+| `POST /api/node` | `{ topic, title, summary }` | `{ lesson, source }` |
 
-- `graph.nodes` = `{ id, title, summary, deps[], goal }`. The server validates
-  the LLM's output (unique ids, real dependencies, acyclic via Kahn, exactly one
-  goal) and falls back to the built-in generator if anything is off.
-- `source` is `"llm"` | `"fallback"` | `"cache"`.
-- Static files are served from `public/` with path-traversal protection.
+`/api/graph` still returns `{ id, title, summary, deps[], goal }` exactly as
+before, so **`public/` and `poc/` both consume it unchanged** — the curriculum
+work and the renderer rebuild stay independent. `source` is `"llm"` |
+`"llm-retry"` | `"fallback"` | `"cache"`.
+
+`/api/node` takes the same request as before, but the server now finds that
+platform in the syllabus it already holds and writes the lesson from its atoms:
+what to teach, what to pull back out of memory first, which misconceptions to
+head off, and how much scaffolding to leave in place. The check it returns comes
+from the syllabus rather than from a second LLM call, so its wrong answers are
+real misconceptions rather than invented ones.
 
 ---
 
 ## Project structure
 
 ```
-├── server.mjs          # zero-dependency Node server: static + JSON API, LLM calls,
-│                       #   graph/lesson validation, demo-mode fallbacks, lesson cache
-├── package.json        # {"start": "node server.mjs"} — nothing to install
+├── server.mjs            # zero-dependency Node server: static + JSON API
+├── curriculum/           # the syllabus pipeline — pure modules, no DOM, no server
+│   ├── negotiate.mjs     #   dialogue → a committed goal and capstone
+│   ├── decompose.mjs     #   goal → atoms, prerequisites, misconceptions, checks
+│   ├── pack.mjs          #   atoms → platforms + derived edges   (pure, no model)
+│   ├── validate.mjs      #   the assertions a syllabus must satisfy
+│   ├── build.mjs         #   the pipeline, with retry and offline fallback
+│   ├── project.mjs       #   syllabus → the graph shape the renderers read
+│   ├── lesson.mjs        #   the lesson prompt, written from the syllabus
+│   ├── llm.mjs           #   Anthropic / OpenAI plumbing
+│   ├── check.mjs         #   headless end-to-end verification + shape report
+│   └── fixtures/         #   hand-authored model responses; --live re-records
 └── public/
-    ├── index.html      # screens: home, loading, world, lesson sheet, fork prompt, summit
-    ├── style.css       # flat palette as CSS vars, per-state overrides, sky, HUD, sheet
-    ├── iso.js          # isometric engine: projection, solids, stairs, domes, depth sort
-    ├── world.js        # the serpentine trail, the platform features, the path builder
-    └── app.js          # rendering, camera, the walk, mist, labels, lessons, save/resume
+    ├── index.html        # screens: home, loading, world, lesson sheet, fork, summit
+    ├── style.css         # flat palette as CSS vars, per-state overrides, sky, HUD
+    ├── iso.js            # isometric engine: projection, solids, stairs, depth sort
+    ├── world.js          # the serpentine trail, platform features, path builder
+    └── app.js            # rendering, camera, the walk, mist, labels, save/resume
 ```
 
 `iso.js` and `world.js` are pure — no DOM, no browser globals — so they import
-straight into Node for geometry work.
+straight into Node for geometry work. Everything in `curriculum/` is likewise
+importable and testable on its own; the two LLM stages take the model as an
+argument, so nothing there needs a network to be tested.
 
 ---
 
@@ -182,3 +256,6 @@ straight into Node for geometry work.
 thrown away and why, the projection arithmetic that constrains the layout, and
 the full list of known limitations. Worth reading before continuing the work —
 several of the obvious ideas here have already been built and discarded.
+
+**[docs/plans/](./docs/plans)** holds the design documents: the slice-world
+rebuild, and the curriculum pipeline with the research behind it.

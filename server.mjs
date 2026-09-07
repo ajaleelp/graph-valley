@@ -1,7 +1,9 @@
 // Graph Valley — zero-dependency Node server.
 // Serves the static frontend and two JSON endpoints:
-//   POST /api/graph  { topic }            -> { topic, graph, source }
-//   POST /api/node   { topic, title, summary } -> { lesson, source }
+//   POST /api/negotiate { topic, turns }  -> { done, ask } | { done, goal, capstone, spine }
+//   POST /api/syllabus  { topic, goal, capstone } -> { syllabus, source }
+//   POST /api/graph     { topic }         -> { topic, graph, source }   (projection)
+//   POST /api/node      { topic, title, summary } -> { lesson, source }
 // Uses Anthropic or OpenAI if a key is present; otherwise falls back to a
 // deterministic built-in generator so the app always works offline.
 
@@ -10,13 +12,15 @@ import { readFile } from 'node:fs/promises';
 import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { llm, hasKey, describeModel } from './curriculum/llm.mjs';
+import { negotiate } from './curriculum/negotiate.mjs';
+import { buildSyllabus, defaultGoalFor, defaultCapstoneFor } from './curriculum/build.mjs';
+import { toGraph } from './curriculum/project.mjs';
+import { lessonPrompt as syllabusLessonPrompt, LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM } from './curriculum/lesson.mjs';
+
 const PORT = Number(process.env.PORT || 3217);
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
 
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -90,156 +94,18 @@ function shuffle(arr) {
   return arr;
 }
 
-/* --------------------------- LLM plumbing --------------------------- */
-
-const GRAPH_SYSTEM =
-  'You design learning curriculums as dependency graphs. Output ONLY valid JSON. No markdown, no prose.';
-
-function graphPrompt(topic) {
-  return `A learner said: "I want to learn ${topic}".
-
-Design a step-by-step learning path as a JSON knowledge graph:
-{"title": "short journey title", "nodes": [{"id": "n1", "title": "...", "summary": "<= 20 words", "deps": ["nX"], "goal": false}]}
-
-Rules:
-- 8 to 12 nodes, ordered from absolute beginner to confident competence.
-- "deps" lists prerequisite node ids and must form a DAG (no cycles). The first 1-2 nodes have no deps.
-- Middle nodes depend on 1-2 earlier nodes. Allow occasional parallel branches.
-- Exactly ONE node has "goal": true; nothing depends on it; it is the final capstone.
-- Node titles: 2-6 words, concrete and specific to ${topic} (no generic filler like "Advanced Topics").
-- Summaries: one sentence describing what the learner will be able to do.`;
-}
-
-const LESSON_SYSTEM =
-  'You are a warm, brilliant teacher writing bite-sized lessons. Output ONLY valid JSON. No markdown, no prose.';
-
-function lessonPrompt(topic, title, summary) {
-  return `Course: "${topic}". Current lesson: "${title}" — ${summary}.
-
-Write this lesson as JSON:
-{"content": ["paragraph 1", "paragraph 2", "paragraph 3"],
- "check": {"question": "...", "options": ["A", "B", "C", "D"], "answerIndex": 0, "explanation": "..."}}
-
-Rules:
-- 2-4 short paragraphs. Concrete, friendly, plain language. Include one vivid analogy or example.
-- Teach THIS lesson only; assume the learner already completed its prerequisites.
-- The check question must be answerable purely from the content above.
-- Exactly 4 options; exactly one correct; wrong options plausible but clearly wrong to a careful reader.`;
-}
-
-async function llm(system, user, maxTokens = 2200) {
-  try {
-    if (ANTHROPIC_KEY) return await anthropic(system, user, maxTokens);
-    if (OPENAI_KEY) return await openai(system, user, maxTokens);
-  } catch (e) {
-    console.warn('LLM call failed:', e.message);
-  }
-  return null;
-}
-
-async function anthropic(system, user, max_tokens) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
-  const data = await res.json();
-  return (data.content || []).map((b) => b.text || '').join('\n');
-}
-
-async function openai(system, user, max_tokens) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${OPENAI_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      max_tokens,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
-}
-
-/* --------------------- graph validation / fallback -------------------- */
-
-function normalizeGraph(g, topic) {
-  if (!g || !Array.isArray(g.nodes)) return null;
-  const nodes = g.nodes.slice(0, 16).map((n, i) => ({
-    id: String(n.id ?? `n${i}`),
-    title: String(n.title ?? `Step ${i + 1}`).slice(0, 80),
-    summary: String(n.summary ?? '').slice(0, 220),
-    deps: Array.isArray(n.deps) ? n.deps.map(String) : [],
-    goal: !!n.goal,
-  }));
-  if (nodes.length < 4) return null;
-  const ids = new Set(nodes.map((n) => n.id));
-  if (ids.size !== nodes.length) return null;
-  for (const n of nodes) n.deps = [...new Set(n.deps.filter((d) => ids.has(d) && d !== n.id))];
-  if (!nodes.some((n) => n.deps.length === 0)) nodes[0].deps = [];
-
-  // acyclicity check (Kahn)
-  const indeg = new Map(nodes.map((n) => [n.id, n.deps.length]));
-  const dependents = new Map(nodes.map((n) => [n.id, []]));
-  nodes.forEach((n) => n.deps.forEach((d) => dependents.get(d).push(n.id)));
-  const queue = nodes.filter((n) => n.deps.length === 0).map((n) => n.id);
-  let seen = 0;
-  while (queue.length) {
-    const id = queue.shift();
-    seen++;
-    for (const m of dependents.get(id)) {
-      indeg.set(m, indeg.get(m) - 1);
-      if (indeg.get(m) === 0) queue.push(m);
-    }
-  }
-  if (seen !== nodes.length) return null; // cycle
-
-  // guarantee exactly one goal
-  let goals = nodes.filter((n) => n.goal);
-  if (goals.length === 0) {
-    const sinks = nodes.filter((n) => dependents.get(n.id).length === 0);
-    sinks[sinks.length - 1].goal = true;
-  } else {
-    goals.slice(1).forEach((n) => (n.goal = false));
-  }
-  return { title: String(g.title || topic).slice(0, 90), nodes };
-}
-
-function fallbackGraph(topic) {
-  const N = (id, title, summary, deps = [], goal = false) => ({ id, title, summary, deps, goal });
+/** The renderer reads one question per platform; the syllabus holds one per
+ *  atom. Hand over the first — scoring all of them is v2's job. */
+function toRendererCheck(c) {
   return {
-    title: `The path to ${topic}`,
-    nodes: [
-      N('n1', `Foundations of ${topic}`, `What ${topic} is, why it matters, and the big picture.`),
-      N('n2', 'Key vocabulary', 'The core terms and mental models used everywhere later on.', ['n1']),
-      N('n3', 'Core principles', 'The fundamental rules that govern how things actually work.', ['n1']),
-      N('n4', 'Common pitfalls', 'Beginner mistakes and how to spot and avoid them early.', ['n2', 'n3']),
-      N('n5', 'Guided practice', 'First hands-on exercises applying the core principles.', ['n3']),
-      N('n6', 'Intermediate techniques', 'Techniques used by confident practitioners day to day.', ['n4', 'n5']),
-      N('n7', 'Real-world applications', 'How all of this shows up in real projects and situations.', ['n6']),
-      N('n8', 'Advanced concepts', 'Deeper ideas that separate experts from amateurs.', ['n6']),
-      N('n9', 'Synthesis project', 'Combine everything into one coherent piece of work.', ['n7', 'n8']),
-      N('n10', `Mastery: ${topic}`, 'Prove to yourself you can do this independently.', ['n9'], true),
-    ],
+    question: c.stem,
+    options: c.options,
+    answerIndex: c.answerIndex,
+    explanation: c.explanation || `This tests one idea: ${c.kc}.`,
   };
 }
+
+/* ---------------------- lesson fallback ---------------------- */
 
 function fallbackLesson(topic, title, summary) {
   const clean = title.replace(/"/g, '');
@@ -288,19 +154,76 @@ function normalizeLesson(x) {
 
 /* ------------------------------ handlers ----------------------------- */
 
+const syllabusCache = new Map();
+
+/** Backward design stage 1: settle the summit by conversation. */
+async function handleNegotiate(req, res) {
+  const body = await readBody(req);
+  const raw = String(body.topic || '').slice(0, 240);
+  if (!raw.trim()) return send(res, 400, { error: 'topic is required' });
+  const topic = cleanTopic(raw);
+
+  const turns = (Array.isArray(body.turns) ? body.turns : [])
+    .slice(0, 6)
+    .map((t) => ({ text: String(t?.text || '').slice(0, 400) }))
+    .filter((t) => t.text);
+
+  const outcome = hasKey() ? await negotiate({ topic, turns, llm }) : null;
+  if (!outcome) {
+    // No key, or nothing usable came back: skip the dialogue and take the topic
+    // at face value rather than stranding the learner on a chat screen.
+    return send(res, 200, {
+      topic,
+      done: true,
+      spine: 'concept',
+      goal: defaultGoalFor(topic),
+      capstone: defaultCapstoneFor(topic),
+      priors: [],
+      source: 'fallback',
+    });
+  }
+  send(res, 200, { topic, ...outcome, source: 'llm' });
+}
+
+/** The full document: atoms, platforms, derived edges, checks. */
+async function buildFor(topic, body = {}) {
+  const key = `${topic}::${body.goal?.statement || ''}`;
+  if (syllabusCache.has(key)) return { ...syllabusCache.get(key), source: 'cache' };
+
+  const built = await buildSyllabus({
+    topic,
+    goal: body.goal || defaultGoalFor(topic),
+    capstone: body.capstone?.prompt ? body.capstone : defaultCapstoneFor(topic),
+    spine: body.spine === 'task' ? 'task' : 'concept',
+    llm: hasKey() ? llm : null,
+  });
+
+  if (built.errors.length) {
+    console.warn(`syllabus for "${topic}" fell back:`, built.errors.map((e) => e.code).join(', '));
+  }
+  syllabusCache.set(key, built);
+  return built;
+}
+
+async function handleSyllabus(req, res) {
+  const body = await readBody(req);
+  const raw = String(body.topic || '').slice(0, 240);
+  if (!raw.trim()) return send(res, 400, { error: 'topic is required' });
+  const topic = cleanTopic(raw);
+
+  const built = await buildFor(topic, body);
+  send(res, 200, { topic, syllabus: built.doc, source: built.source });
+}
+
+/** The old shape, projected from the new document. Renderers see no change. */
 async function handleGraph(req, res) {
   const body = await readBody(req);
   const raw = String(body.topic || '').slice(0, 240);
   if (!raw.trim()) return send(res, 400, { error: 'topic is required' });
   const topic = cleanTopic(raw);
 
-  let graph = normalizeGraph(extractJson(await llm(GRAPH_SYSTEM, graphPrompt(topic))), topic);
-  let source = 'llm';
-  if (!graph) {
-    graph = fallbackGraph(topic);
-    source = 'fallback';
-  }
-  send(res, 200, { topic, graph, source });
+  const built = await buildFor(topic, body);
+  send(res, 200, { topic, graph: toGraph(built.doc), source: built.source });
 }
 
 async function handleNode(req, res) {
@@ -313,9 +236,19 @@ async function handleNode(req, res) {
   const key = `${topic}::${title}`;
   if (lessonCache.has(key)) return send(res, 200, { lesson: lessonCache.get(key), source: 'cache' });
 
-  let lesson = normalizeLesson(extractJson(await llm(LESSON_SYSTEM, lessonPrompt(topic, title, summary), 2000)));
+  // The renderer only knows a title, but we still hold the syllabus it came
+  // from — so the lesson can be written from the atoms rather than the label.
+  const doc = [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
+  const node = doc?.nodes.find((n) => n.title === title);
+
+  let lesson = normalizeLesson(extractJson(await llm(
+    SYLLABUS_LESSON_SYSTEM,
+    syllabusLessonPrompt(doc, node, { topic, title, summary }),
+    2000,
+  )));
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, title, summary);
+  if (node?.checks?.length) lesson.check = toRendererCheck(node.checks[0]);
   lessonCache.set(key, lesson);
   send(res, 200, { lesson, source });
 }
@@ -346,6 +279,8 @@ async function serveStatic(pathname, res) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
+    if (req.method === 'POST' && url.pathname === '/api/negotiate') return await handleNegotiate(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/syllabus') return await handleSyllabus(req, res);
     if (req.method === 'POST' && url.pathname === '/api/graph') return await handleGraph(req, res);
     if (req.method === 'POST' && url.pathname === '/api/node') return await handleNode(req, res);
     if (req.method === 'GET') return await serveStatic(url.pathname, res);
@@ -357,10 +292,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  const llm = ANTHROPIC_KEY
-    ? `Anthropic (${ANTHROPIC_MODEL})`
-    : OPENAI_KEY
-      ? `OpenAI (${OPENAI_MODEL})`
-      : 'none — demo mode (set ANTHROPIC_API_KEY or OPENAI_API_KEY)';
-  console.log(`\n  Graph Valley running → http://localhost:${PORT}\n  LLM: ${llm}\n`);
+  console.log(`\n  Graph Valley running → http://localhost:${PORT}\n  LLM: ${describeModel()}\n`);
 });
