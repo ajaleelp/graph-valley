@@ -9,6 +9,6 @@
     "test": "node --test 'curriculum/*.test.mjs'",
     "check": "node --env-file-if-exists=.env curriculum/check.mjs",
     "poc": "node poc/serve.mjs",
-    "poc:check": "node poc/check.mjs"
+    "world": "node world/check.mjs"
   }
 }

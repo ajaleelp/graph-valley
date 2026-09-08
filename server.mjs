@@ -9,7 +9,7 @@
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { join, normalize, extname } from 'node:path';
+import { join, normalize, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { llm, hasKey, describeModel } from './curriculum/llm.mjs';
@@ -20,6 +20,10 @@ import { lessonPrompt as syllabusLessonPrompt, LESSON_SYSTEM as SYLLABUS_LESSON_
 
 const PORT = Number(process.env.PORT || 3217);
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
+// The world engine is shared: public/ renders with it, poc/ whiteboxes it, and
+// world/check.mjs asserts it. Serving it from one place is what keeps those
+// three honest about being the same code.
+const WORLD_DIR = fileURLToPath(new URL('./world', import.meta.url));
 
 
 const MIME = {
@@ -253,8 +257,10 @@ async function serveStatic(pathname, res) {
     p = '/';
   }
   if (p === '/') p = '/index.html';
-  const fp = join(PUBLIC_DIR, normalize(p).replace(/^([/\\])+/, ''));
-  if (!fp.startsWith(PUBLIC_DIR)) {
+  const rel = normalize(p).replace(/^([/\\])+/, '');
+  const root = rel === 'world' || rel.startsWith('world/') ? dirname(WORLD_DIR) : PUBLIC_DIR;
+  const fp = join(root, rel);
+  if (!fp.startsWith(root === PUBLIC_DIR ? PUBLIC_DIR : WORLD_DIR)) {
     res.writeHead(403);
     return res.end('forbidden');
   }

@@ -7,11 +7,11 @@
  */
 
 import { writeFile } from 'node:fs/promises';
-import { build } from './build.js';
-import { GRAPHS } from './graphs.js';
-import { P, depthSort } from './iso.js';
-import { traveller } from './walk.js';
-import { CELL } from './slices.js';
+import { build } from '../world/build.js';
+import { GRAPHS } from '../world/graphs.js';
+import { P, depthSort } from '../world/iso.js';
+import { traveller } from '../world/walk.js';
+import { CELL } from '../world/slices.js';
 
 const PALETTE = {
   bg: '#eae4da', ink: '#4a4034',

@@ -6,12 +6,12 @@
  * order rather than re-rendering the scene.
  */
 
-import { P, depthSort } from './iso.js';
-import { build } from './build.js';
-import { CELL } from './slices.js';
-import { GRAPHS } from './graphs.js';
-import { findWalk, nearestNode, navKey } from './nav.js';
-import { plan, at, duration, traveller, orderWith } from './walk.js';
+import { P, depthSort } from '/world/iso.js';
+import { build } from '/world/build.js';
+import { CELL } from '/world/slices.js';
+import { GRAPHS } from '/world/graphs.js';
+import { findWalk, nearestNode, navKey } from '/world/nav.js';
+import { plan, at, duration, traveller, orderWith } from '/world/walk.js';
 
 const svg = document.getElementById('stage');
 const NS = 'http://www.w3.org/2000/svg';
