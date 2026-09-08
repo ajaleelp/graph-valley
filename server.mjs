@@ -98,8 +98,9 @@ function shuffle(arr) {
   return arr;
 }
 
-/** The renderer reads one question per platform; the syllabus holds one per
- *  atom. Hand over the first — scoring all of them is v2's job. */
+/** The syllabus holds one question per atom, and every one of them now reaches
+ *  the renderer. Carrying them and showing one was the last place where the
+ *  document knew more than the learner ever saw. */
 function toRendererCheck(c) {
   return {
     question: c.stem,
@@ -175,9 +176,15 @@ async function handleNegotiate(req, res) {
   send(res, 200, { topic, ...outcome, source: 'llm' });
 }
 
+/** One topic can be negotiated into several different courses, so a syllabus is
+ *  identified by its topic AND the goal that was settled on — not the topic
+ *  alone. `handleNode` has to derive the same key, or it writes the lesson from
+ *  whichever course happened to be cached first. */
+const keyFor = (topic, goal) => `${topic}::${goal?.statement || ''}`;
+
 /** The full document: atoms, platforms, derived edges, checks. */
 async function buildFor(topic, body = {}) {
-  const key = `${topic}::${body.goal?.statement || ''}`;
+  const key = keyFor(topic, body.goal);
   if (syllabusCache.has(key)) return { ...syllabusCache.get(key), source: 'cache' };
 
   const built = await buildSyllabus({
@@ -202,7 +209,10 @@ async function handleSyllabus(req, res) {
   const topic = cleanTopic(raw);
 
   const built = await buildFor(topic, body);
-  send(res, 200, { topic, syllabus: built.doc, source: built.source });
+  // Both shapes in one round trip: the renderer wants the projection, the
+  // lesson sheet wants the document. Asking for them separately meant building
+  // the world and then waiting again before anything could be taught.
+  send(res, 200, { topic, syllabus: built.doc, graph: toGraph(built.doc), source: built.source });
 }
 
 /** The old shape, projected from the new document. Renderers see no change. */
@@ -223,13 +233,15 @@ async function handleNode(req, res) {
   const summary = String(body.summary || '').slice(0, 300);
   if (!topic || !title) return send(res, 400, { error: 'topic and title are required' });
 
-  const key = `${topic}::${title}`;
+  const key = `${keyFor(topic, body.goal)}::${title}`;
   if (lessonCache.has(key)) return send(res, 200, { lesson: lessonCache.get(key), source: 'cache' });
 
-  // The renderer only knows a title, but we still hold the syllabus it came
-  // from — so the lesson can be written from the atoms rather than the label.
-  const doc = [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
-  const node = doc?.nodes.find((n) => n.title === title);
+  // The lesson is written from the atoms of the platform it belongs to, not
+  // from its label. The client sends back the goal it was built with so we look
+  // up the same course it is actually walking.
+  const doc = syllabusCache.get(keyFor(topic, body.goal))?.doc
+    || [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
+  const node = doc?.nodes.find((n) => n.id === body.id) || doc?.nodes.find((n) => n.title === title);
 
   let raw = null;
   try {
@@ -244,7 +256,12 @@ async function handleNode(req, res) {
   let lesson = readLesson(extractJson(raw));
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, title, summary);
-  if (node?.checks?.length) lesson.check = toRendererCheck(node.checks[0]);
+  if (node?.checks?.length) {
+    lesson.checks = node.checks.map(toRendererCheck);
+    lesson.check = lesson.checks[0];         // the fallback lesson still writes one
+  } else if (lesson.check) {
+    lesson.checks = [lesson.check];
+  }
   lessonCache.set(key, lesson);
   send(res, 200, { lesson, source });
 }

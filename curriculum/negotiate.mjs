@@ -37,14 +37,19 @@ unscopeable, "trace one token through a transformer and say why attention is
 needed" is a finite syllabus.
 
 Answer with exactly one of:
-{"ask": "one short question, offering concrete alternatives"}
+{"ask": "one short question, in the SECOND PERSON, offering concrete alternatives"}
 {"done": true,
  "spine": "concept" if this is a body of knowledge, "task" if it is a skill to perform,
  "goal": {"statement": "an action, starting with a verb — \"Trace a token through ...\", not \"she will be able to ...\"", "level": "remember|understand|apply|analyze|evaluate|create", "audience": "who she is"},
  "capstone": {"prompt": "the task that would prove it", "rubric": ["what a good answer shows", "..."]},
  "priors": ["anything she said she already knows, in her own words"]}
 
-Ask about scope, depth or purpose — never about learning styles.`;
+Ask about scope, depth or purpose — never about learning styles.
+
+The question is shown to her verbatim, so write it TO her: "Do you want to ..."
+or "Which interests you ...". Never "Does she want ..." — the schema below
+describes her in the third person and models copy that voice straight into the
+question, which then reads as though she is being discussed rather than asked.`;
 }
 
 function extractJson(text) {

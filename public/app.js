@@ -114,6 +114,7 @@ function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       topic: S.topic, title: S.title, source: S.source, done: [...S.done],
+      goal: S.goal, capstone: S.capstone,
       graph: {
         title: S.graph.title,
         nodes: S.graph.nodes.map((n) => ({ id: n.id, title: n.title, summary: n.summary, deps: n.deps, goal: n.goal })),
@@ -684,7 +685,7 @@ function openSheet(n, st) {
     if (S.currentNode !== n || !$('#modal-backdrop').classList.contains('show')) return;
     $('#sheet-content').innerHTML = lesson.content.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
     if (st === 'complete') return;
-    renderCheck(n, lesson.check);
+    renderChecks(n, lesson.checks?.length ? lesson.checks : [lesson.check].filter(Boolean));
   }).catch(() => {
     $('#sheet-content').innerHTML =
       '<p class="sheet-error">Could not load this lesson. <button class="ghost" id="retry-lesson">Retry</button></p>';
@@ -697,7 +698,7 @@ async function loadLesson(n) {
   const res = await fetch('/api/node', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ topic: S.topic, title: n.title, summary: n.summary }),
+    body: JSON.stringify({ topic: S.topic, id: n.id, title: n.title, summary: n.summary, goal: S.goal }),
     signal: AbortSignal.timeout(90000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -707,37 +708,59 @@ async function loadLesson(n) {
   return data.lesson;
 }
 
-function renderCheck(n, check) {
-  $('#sheet-check').classList.remove('hidden');
-  $('#check-q').textContent = check.question;
+/* Every question the syllabus holds for this platform, asked one at a time.
+ *
+ * The document has always carried one check per atom; the renderer showed the
+ * first and dropped the rest, so a platform teaching three things was examined
+ * on one of them. They are asked in sequence rather than all at once because a
+ * wall of four questions reads as a test, and because a wrong answer should be
+ * something you correct and move past, not something you scroll away from.
+ */
+function renderChecks(n, checks) {
+  if (!checks || !checks.length) { completeNode(n); return; }
   const box = $('#check-opts');
-  box.innerHTML = '';
-  $('#check-expl').classList.add('hidden');
-  $('#check-continue').classList.add('hidden');
-  let settled = false;
+  $('#sheet-check').classList.remove('hidden');
 
-  check.options.forEach((opt, i) => {
-    const b = document.createElement('button');
-    b.className = 'opt';
-    b.textContent = opt;
-    b.addEventListener('click', () => {
-      if (settled || b.disabled) return;
-      if (i === check.answerIndex) {
+  let i = 0;
+  const ask = () => {
+    const check = checks[i];
+    $('#check-count').textContent = checks.length > 1 ? `${i + 1} of ${checks.length}` : '';
+    $('#check-q').textContent = check.question;
+    box.innerHTML = '';
+    $('#check-expl').classList.add('hidden');
+    $('#check-continue').classList.add('hidden');
+    let settled = false;
+
+    check.options.forEach((opt, idx) => {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.textContent = opt;
+      b.addEventListener('click', () => {
+        if (settled || b.disabled) return;
+        if (idx !== check.answerIndex) {
+          b.classList.add('wrong');
+          b.disabled = true;
+          toast('Not quite — try another.');
+          return;
+        }
         settled = true;
         b.classList.add('correct');
         $$('.opt', box).forEach((o) => (o.disabled = true));
         $('#check-expl').textContent = check.explanation || 'Correct.';
         $('#check-expl').classList.remove('hidden');
+
+        i += 1;
+        if (i < checks.length) {
+          setTimeout(ask, 900);                 // long enough to read why
+          return;
+        }
         $('#check-continue').classList.remove('hidden');
         completeNode(n);
-      } else {
-        b.classList.add('wrong');
-        b.disabled = true;
-        toast('Not quite — try another.');
-      }
+      });
+      box.appendChild(b);
     });
-    box.appendChild(b);
-  });
+  };
+  ask();
 }
 
 function completeNode(n) {
@@ -839,6 +862,86 @@ function cycleLoadingMessages() {
   loadTimer = setInterval(() => { i = (i + 1) % LOAD_MSGS.length; msg.textContent = LOAD_MSGS[i]; }, 1700);
 }
 
+/* -------------------------------- intake -------------------------------- */
+
+/* Backward design, stage one. "Learn AI" is unscopeable; "implement a
+ * supervised learning algorithm from scratch" is a syllabus of finite length,
+ * and the difference is a question or two. The server decides whether asking
+ * is worth it — it commits the moment a different answer would not change the
+ * course — so this loop usually runs once or twice, not three times. */
+const MAX_TURNS = 3;
+
+async function post(url, body, ms = 90000) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ms),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function showIntake(topic, ask, turnNo) {
+  $('#intake-topic').textContent = topic;
+  $('#intake-ask').textContent = ask;
+  $('#intake-input').value = '';
+  $('#intake-steps').textContent = '·'.repeat(turnNo) + '○'.repeat(Math.max(0, MAX_TURNS - turnNo));
+  showScreen('screen-intake');
+  $('#intake-input').focus();
+}
+
+/* Wait for the learner's answer, or for them to skip. Resolves to null if they
+ * would rather we just built the thing. */
+function awaitAnswer() {
+  return new Promise((resolve) => {
+    const form = $('#intake-form');
+    const skip = $('#intake-skip');
+    const done = (value) => {
+      form.removeEventListener('submit', onSubmit);
+      skip.removeEventListener('click', onSkip);
+      resolve(value);
+    };
+    const onSubmit = (e) => { e.preventDefault(); const v = $('#intake-input').value.trim(); if (v) done(v); };
+    const onSkip = () => done(null);
+    form.addEventListener('submit', onSubmit);
+    skip.addEventListener('click', onSkip);
+  });
+}
+
+/* Run the dialogue to a committed goal. Returns whatever the server last said,
+ * which is always a commitment: it forces one on the final turn, and falls
+ * back to taking the topic at face value rather than stranding anyone here. */
+async function negotiateGoal(topic) {
+  const turns = [];
+  // Every one of these is a model call, and the last one — the forced
+  // commitment — is the slowest. Without a waiting state the screen sits on a
+  // question she has already answered, which reads as the app having hung.
+  const thinking = (on) => {
+    $('#intake-form').classList.toggle('busy', on);
+    $('#intake-send').disabled = on;
+    $('#intake-input').disabled = on;
+    if (on) $('#intake-steps').textContent = 'thinking…';
+  };
+
+  for (let i = 0; i < MAX_TURNS; i++) {
+    const out = await post('/api/negotiate', { topic, turns });
+    thinking(false);
+    if (out.done) return out;
+    showIntake(topic, out.ask, i + 1);
+    const answer = await awaitAnswer();
+    if (answer === null) break;                 // skipped: commit with what we have
+    turns.push({ text: answer });
+    thinking(true);
+  }
+  thinking(true);
+  const settled = await post('/api/negotiate', { topic, turns });
+  thinking(false);
+  return settled;
+}
+
+/* -------------------------------- journey ------------------------------- */
+
 async function startJourney(topic, { restore = false } = {}) {
   topic = String(topic || '').trim();
   if (!topic) {
@@ -852,6 +955,7 @@ async function startJourney(topic, { restore = false } = {}) {
   if (restore && save?.graph && save.topic?.toLowerCase() === topic.toLowerCase()) {
     Object.assign(S, {
       topic: save.topic, title: save.title, graph: save.graph, source: save.source,
+      goal: save.goal, capstone: save.capstone, syllabus: save.syllabus,
       done: new Set(save.done), lessonCache: new Map(),
     });
     enterWorld();
@@ -859,23 +963,22 @@ async function startJourney(topic, { restore = false } = {}) {
     return;
   }
 
-  showScreen('screen-loading');
-  cycleLoadingMessages();
   try {
-    const [res] = await Promise.all([
-      fetch('/api/graph', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ topic }),
-        signal: AbortSignal.timeout(90000),
+    const settled = await negotiateGoal(topic);
+
+    showScreen('screen-loading');
+    cycleLoadingMessages();
+    const [data] = await Promise.all([
+      post('/api/syllabus', {
+        topic, goal: settled.goal, capstone: settled.capstone, spine: settled.spine,
       }),
       wait(1400),
     ]);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
     if (!data.graph || !Array.isArray(data.graph.nodes)) throw new Error('bad graph');
+
     Object.assign(S, {
       topic: data.topic, title: data.graph.title, graph: data.graph,
+      syllabus: data.syllabus, goal: settled.goal, capstone: settled.capstone,
       source: data.source, done: new Set(), lessonCache: new Map(),
     });
     saveGame();

@@ -32,6 +32,7 @@ body {
 .hidden { display: none !important; }
 .screen { display: none; position: fixed; inset: 0; }
 #screen-home.active,
+#screen-intake.active,
 #screen-loading.active { display: flex; align-items: center; justify-content: center; }
 #screen-world.active { display: block; }
 
@@ -136,6 +137,41 @@ button { font: inherit; color: inherit; }
 #topic-input.shake { animation: shakex 0.4s; }
 
 #chips { margin-top: 22px; display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------------------------- intake ---------------------------------- */
+/* The negotiation before the world is built. Deliberately quieter than the
+   home screen: this is a conversation, not a headline. */
+.intake {
+  text-align: center; padding: 24px; max-width: 640px;
+  position: relative; z-index: 2;
+}
+.intake-topic { margin: 0 0 18px; color: #86636c; font-size: 0.95rem; }
+.intake-topic b { color: #55404a; font-weight: 600; }
+.intake h2 {
+  margin: 0 0 26px;
+  font-size: clamp(1.5rem, 3.4vw, 2.1rem);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: #55404a;
+}
+#intake-form { display: flex; gap: 10px; justify-content: center; }
+#intake-input {
+  flex: 1; min-width: 0; max-width: 420px;
+  padding: 15px 20px; font: inherit; font-size: 1rem;
+  color: #55404a; background: rgba(255, 255, 255, 0.9);
+  border: none; border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(120, 80, 90, 0.16);
+  outline: none;
+}
+#intake-input::placeholder { color: rgba(120, 90, 100, 0.5); }
+#intake-input:focus { box-shadow: 0 12px 34px rgba(120, 80, 90, 0.22), 0 0 0 3px rgba(255, 255, 255, 0.85); }
+#intake-steps {
+  margin: 18px 0 4px; letter-spacing: 8px; color: rgba(120, 90, 100, 0.45); font-size: 0.9rem;
+}
+#intake-skip { margin-top: 8px; }
+#intake-form.busy #intake-input { opacity: 0.55; }
+#intake-form.busy #intake-send { opacity: 0.55; cursor: progress; }
 .chip {
   border: none;
   background: rgba(255, 253, 249, 0.5);
