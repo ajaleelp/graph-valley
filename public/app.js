@@ -6,6 +6,19 @@ import { CELL, DECK } from '/world/slices.js';
 import { findWalk, nearestNode, navKey } from '/world/nav.js';
 import { plan as planWalk, at as walkAt, duration, traveller, orderWith } from '/world/walk.js';
 
+/* TEMPORARY OBSERVABILITY. Fire-and-forget; never awaited, never blocks, never
+ * throws. Delete this and its call sites to remove the tracing. */
+function observe(event, data = {}) {
+  try {
+    fetch('/api/observe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ event, data }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch { /* never let tracing break the app */ }
+}
+
 /* Stable hash so a topic always produces the same chapter palette. */
 function hash(str) {
   let h = 2166136261;
@@ -667,6 +680,7 @@ function onNodeClick(id) {
     return;
   }
   hideChoice();
+  observe('open', { id: n.id, title: n.title, status: st });
   S.currentNode = n;
   walkTo(n, () => openSheet(n, statusOf(n)));
 }
@@ -683,6 +697,11 @@ function openSheet(n, st) {
 
   loadLesson(n).then((lesson) => {
     if (S.currentNode !== n || !$('#modal-backdrop').classList.contains('show')) return;
+    observe('lesson', {
+      id: n.id, paragraphs: lesson.content.length,
+      words: lesson.content.join(' ').split(/\s+/).length,
+      checks: lesson.checks?.length ?? (lesson.check ? 1 : 0),
+    });
     $('#sheet-content').innerHTML = lesson.content.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
     if (st === 'complete') return;
     renderChecks(n, lesson.checks?.length ? lesson.checks : [lesson.check].filter(Boolean));
@@ -728,6 +747,7 @@ function renderChecks(n, checks) {
     $('#check-q').textContent = check.question;
     box.innerHTML = '';
     $('#check-expl').classList.add('hidden');
+    $('#check-cleared').classList.add('hidden');
     $('#check-continue').classList.add('hidden');
     let settled = false;
 
@@ -740,6 +760,7 @@ function renderChecks(n, checks) {
         if (idx !== check.answerIndex) {
           b.classList.add('wrong');
           b.disabled = true;
+          observe('check.wrong', { id: n.id, n: i + 1, chose: idx });
           toast('Not quite — try another.');
           return;
         }
@@ -749,18 +770,50 @@ function renderChecks(n, checks) {
         $('#check-expl').textContent = check.explanation || 'Correct.';
         $('#check-expl').classList.remove('hidden');
 
+        observe('check.correct', { id: n.id, n: i + 1, of: checks.length });
         i += 1;
         if (i < checks.length) {
           setTimeout(ask, 900);                 // long enough to read why
           return;
         }
-        $('#check-continue').classList.remove('hidden');
-        completeNode(n);
+        clearLevel(n);
       });
       box.appendChild(b);
     });
   };
   ask();
+}
+
+/* The last question is answered: say so, close, and go.
+ *
+ * Finishing a platform used to leave her standing in an open sheet with a
+ * button to press. It is a journey — clearing a place should hand you the next
+ * one rather than ask permission to continue. So: tell her she has cleared it,
+ * unlock what it opens, close the sheet on its own, and walk her onward. A
+ * fork still gets asked at the fork; that is a real choice, not a prompt. */
+const CLEARED = ['Platform cleared.', 'This place is yours.', 'Cleared — the way opens.'];
+
+function clearLevel(n) {
+  const before = new Set(S.courts.filter((x) => statusOf(x) === 'available').map((x) => x.id));
+  completeNode(n);
+
+  const opened = S.courts.filter((m) => statusOf(m) === 'available' && !before.has(m.id));
+  const banner = $('#check-cleared');
+  banner.textContent = n.goal ? 'You have reached the summit.'
+    : CLEARED[hash(n.id) % CLEARED.length] + (opened.length ? ` ${opened.length > 1 ? 'Two ways open.' : 'Moving on…'}` : '');
+  banner.classList.remove('hidden');
+  observe('level.cleared', { id: n.id, title: n.title, opened: opened.map((m) => m.id) });
+
+  // The button stays as an escape hatch — and is the whole mechanism when
+  // motion is reduced, where nothing should move on its own.
+  $('#check-continue').classList.remove('hidden');
+  if (n.goal) return;                            // celebrate() already has this
+
+  if (S.reduced) return;                         // nothing moves on its own here
+  clearTimeout(S.clearTimer);
+  S.clearTimer = setTimeout(() => {
+    if ($('#modal-backdrop').classList.contains('show')) closeSheet();
+  }, 1500);
 }
 
 function completeNode(n) {
@@ -780,14 +833,26 @@ function completeNode(n) {
 }
 
 function closeSheet() {
+  clearTimeout(S.clearTimer);                    // she pressed on before we did
   $('#modal-backdrop').classList.remove('show');
   const n = S.currentNode;
-  if (!n || n.goal) return;
+  if (!n || n.goal || !S.done.has(n.id)) return;
+
   const opts = S.courts.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
-  if (opts.length < 2) return;
-  // Walk out to the fork first and ask there. Being asked which way to go
-  // while still standing in the doorway is not a choice you can see.
-  walkToJunction(n, opts, () => showChoice(opts));
+  if (!opts.length) return;
+
+  if (opts.length > 1) {
+    // Walk out to the fork first and ask there. Being asked which way to go
+    // while still standing in the doorway is not a choice you can see.
+    observe('fork', { from: n.id, options: opts.map((m) => m.id) });
+    walkToJunction(n, opts, () => showChoice(opts));
+    return;
+  }
+  // Exactly one way on: take it. Walking her there and opening it is what
+  // "the next level" means; making her find and click it again is ceremony.
+  observe('advance', { from: n.id, to: opts[0].id });
+  S.currentNode = opts[0];
+  walkTo(opts[0], () => openSheet(opts[0], statusOf(opts[0])));
 }
 
 /* -------------------------- fork-in-the-road prompt ---------------------- */
@@ -869,7 +934,11 @@ function cycleLoadingMessages() {
  * and the difference is a question or two. The server decides whether asking
  * is worth it — it commits the moment a different answer would not change the
  * course — so this loop usually runs once or twice, not three times. */
-const MAX_TURNS = 3;
+/* One question, not three. The server decides whether even that is worth
+ * asking and commits the moment a different answer would not change the
+ * course; this is the ceiling, and being interrogated before anything is built
+ * is the fastest way to lose someone. */
+const MAX_TURNS = 1;
 
 async function post(url, body, ms = 90000) {
   const res = await fetch(url, {
@@ -924,19 +993,27 @@ async function negotiateGoal(topic) {
     if (on) $('#intake-steps').textContent = 'thinking…';
   };
 
+  // Questions already put to her. The server refuses to ask the same thing
+  // twice — a repeat narrows nothing and reads as pestering.
+  const asked = [];
+
   for (let i = 0; i < MAX_TURNS; i++) {
-    const out = await post('/api/negotiate', { topic, turns });
+    const out = await post('/api/negotiate', { topic, turns, asked, maxTurns: MAX_TURNS });
     thinking(false);
-    if (out.done) return out;
+    if (out.done) { observe('intake.commit', { topic, questions: asked.length, goal: out.goal?.statement }); return out; }
+    asked.push(out.ask);
+    observe('intake.ask', { topic, n: i + 1, ask: out.ask });
     showIntake(topic, out.ask, i + 1);
     const answer = await awaitAnswer();
-    if (answer === null) break;                 // skipped: commit with what we have
+    if (answer === null) { observe('intake.skip', { topic }); break; }
+    observe('intake.answer', { topic, n: i + 1, answer });
     turns.push({ text: answer });
     thinking(true);
   }
   thinking(true);
-  const settled = await post('/api/negotiate', { topic, turns });
+  const settled = await post('/api/negotiate', { topic, turns, asked, maxTurns: MAX_TURNS });
   thinking(false);
+  observe('intake.commit', { topic, questions: asked.length, goal: settled.goal?.statement });
   return settled;
 }
 
@@ -1019,6 +1096,14 @@ function enterWorld() {
 
   renderWorld();
   fitView();
+
+  observe('world', {
+    topic: S.topic, source: S.source, platforms: S.courts.length,
+    plan: S.world.graph.compose.plan.mode, bands: S.world.graph.compose.plan.bands,
+    aspect: +S.world.graph.compose.score.aspect.toFixed(2),
+    fill: +S.world.graph.compose.score.fill.toFixed(2),
+    viewport, problems: S.world.problems,
+  });
 
   const start = S.courts.find((n) => n.depth === 0) || S.courts[0];
   placeAvatar(start);

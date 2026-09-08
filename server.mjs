@@ -12,6 +12,8 @@ import { readFile } from 'node:fs/promises';
 import { join, normalize, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { appendFile, mkdir } from 'node:fs/promises';
+
 import { llm, hasKey, describeModel } from './curriculum/llm.mjs';
 import { negotiate } from './curriculum/negotiate.mjs';
 import { buildSyllabus, defaultGoalFor, defaultCapstoneFor } from './curriculum/build.mjs';
@@ -19,6 +21,23 @@ import { toGraph } from './curriculum/project.mjs';
 import { lessonPrompt as syllabusLessonPrompt, LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM, readLesson } from './curriculum/lesson.mjs';
 
 const PORT = Number(process.env.PORT || 3217);
+/* ------------------------- TEMPORARY OBSERVABILITY -------------------------
+ * A JSONL trace of what actually happened, so a manual test session can be
+ * read back afterwards instead of reconstructed from memory. One line per
+ * event, appended, never rotated, gitignored.
+ *
+ * Delete this block, the /api/observe route and the observe() calls in
+ * public/app.js to remove it. Nothing else depends on it. */
+const TRACE = fileURLToPath(new URL('./.observe/trace.jsonl', import.meta.url));
+let traceReady = null;
+
+function note(event, data = {}) {
+  const line = JSON.stringify({ t: new Date().toISOString(), event, ...data }) + '\n';
+  traceReady = (traceReady || mkdir(fileURLToPath(new URL('./.observe', import.meta.url)), { recursive: true }))
+    .then(() => appendFile(TRACE, line))
+    .catch(() => {});           // observability must never break the request
+}
+
 const PUBLIC_DIR = fileURLToPath(new URL('./public', import.meta.url));
 // The world engine is shared: public/ renders with it, poc/ whiteboxes it, and
 // world/check.mjs asserts it. Serving it from one place is what keeps those
@@ -154,15 +173,33 @@ async function handleNegotiate(req, res) {
     .map((t) => ({ text: String(t?.text || '').slice(0, 400) }))
     .filter((t) => t.text);
 
+  // How many questions the client is willing to ask. One, by default: the hook
+  // is "type a goal, walk the path", and being interrogated before anything is
+  // built is the fastest way to lose someone.
+  const maxTurns = Math.max(1, Math.min(3, Number(body.maxTurns) || 1));
+
   let outcome = null;
   try {
-    if (hasKey()) outcome = await negotiate({ topic, turns, llm });
+    if (hasKey()) outcome = await negotiate({ topic, turns, llm, maxTurns });
   } catch (e) {
     console.warn('negotiate failed:', e.message);
+    note('negotiate.error', { topic, message: e.message });
+  }
+
+  // A model that asks the same thing twice is not narrowing anything, and the
+  // learner experiences it as being pestered. Treat a repeat as a commitment.
+  if (outcome && !outcome.done && turns.length) {
+    const norm = (t) => String(t).toLowerCase().replace(/[^a-z ]/g, '').trim();
+    const asked = norm(outcome.ask);
+    if (body.asked?.some?.((q) => norm(q) === asked)) {
+      note('negotiate.repeat', { topic, ask: outcome.ask });
+      outcome = await negotiate({ topic, turns, llm, maxTurns: 0 });
+    }
   }
   if (!outcome) {
     // No key, or nothing usable came back: skip the dialogue and take the topic
     // at face value rather than stranding the learner on a chat screen.
+    note('negotiate', { topic, turns: turns.length, source: 'fallback', done: true });
     return send(res, 200, {
       topic,
       done: true,
@@ -173,6 +210,10 @@ async function handleNegotiate(req, res) {
       source: 'fallback',
     });
   }
+  note('negotiate', {
+    topic, turns: turns.length, source: 'llm', done: !!outcome.done,
+    ask: outcome.ask, goal: outcome.goal?.statement, level: outcome.goal?.level,
+  });
   send(res, 200, { topic, ...outcome, source: 'llm' });
 }
 
@@ -198,6 +239,13 @@ async function buildFor(topic, body = {}) {
   if (built.errors.length) {
     console.warn(`syllabus for "${topic}" fell back:`, built.errors.map((e) => e.code).join(', '));
   }
+  note('syllabus', {
+    topic, source: built.source,
+    goal: (body.goal || defaultGoalFor(topic)).statement,
+    level: (body.goal || defaultGoalFor(topic)).level,
+    platforms: built.doc.nodes.length, atoms: built.doc.kcs.length,
+    errors: built.errors.map((e) => e.code),
+  });
   syllabusCache.set(key, built);
   return built;
 }
@@ -239,30 +287,48 @@ async function handleNode(req, res) {
   // The lesson is written from the atoms of the platform it belongs to, not
   // from its label. The client sends back the goal it was built with so we look
   // up the same course it is actually walking.
-  const doc = syllabusCache.get(keyFor(topic, body.goal))?.doc
-    || [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
+  const held = syllabusCache.get(keyFor(topic, body.goal));
+  const doc = held?.doc || [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
   const node = doc?.nodes.find((n) => n.id === body.id) || doc?.nodes.find((n) => n.title === title);
+
+  // Whose questions to use. The syllabus's are far better when they are real:
+  // each is tagged to an atom and its distractors are named misconceptions. But
+  // when the syllabus itself fell back they are template filler, and filler put
+  // in front of a learner is worse than a question the model wrote about what
+  // it just taught. So in that case we ask for them.
+  const syllabusIsReal = held ? held.source !== 'fallback' : false;
+  const needChecks = !syllabusIsReal || !node?.checks?.length;
 
   let raw = null;
   try {
     raw = await llm(
       SYLLABUS_LESSON_SYSTEM,
-      syllabusLessonPrompt(doc, node, { topic, title, summary }),
+      syllabusLessonPrompt(doc, node, { topic, title, summary }, { needChecks }),
       2000,
     );
   } catch (e) {
     console.warn('lesson call failed:', e.message);
+    note('lesson.error', { topic, title, message: e.message });
   }
   let lesson = readLesson(extractJson(raw));
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, title, summary);
-  if (node?.checks?.length) {
+  let checkSource = 'llm';
+  if (syllabusIsReal && node?.checks?.length) {
     lesson.checks = node.checks.map(toRendererCheck);
-    lesson.check = lesson.checks[0];         // the fallback lesson still writes one
-  } else if (lesson.check) {
-    lesson.checks = [lesson.check];
+    checkSource = 'syllabus';
+  } else if (!lesson.checks?.length) {
+    lesson.checks = lesson.check ? [lesson.check] : [];
+    checkSource = source === 'fallback' ? 'template' : 'llm';
   }
+  lesson.check = lesson.checks[0];
   lessonCache.set(key, lesson);
+  note('lesson', {
+    topic, id: body.id, title, source, checkSource,
+    paragraphs: lesson.content.length,
+    words: lesson.content.join(' ').split(/\s+/).length,
+    checks: lesson.checks.length,
+  });
   send(res, 200, { lesson, source });
 }
 
@@ -298,6 +364,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/syllabus') return await handleSyllabus(req, res);
     if (req.method === 'POST' && url.pathname === '/api/graph') return await handleGraph(req, res);
     if (req.method === 'POST' && url.pathname === '/api/node') return await handleNode(req, res);
+    // TEMPORARY: client-side events, so a manual test session reads back whole.
+    if (req.method === 'POST' && url.pathname === '/api/observe') {
+      const b = await readBody(req);
+      note(`ui.${String(b.event || 'unknown').slice(0, 40)}`, b.data || {});
+      return send(res, 200, { ok: true });
+    }
     if (req.method === 'GET') return await serveStatic(url.pathname, res);
     send(res, 404, { error: 'not found' });
   } catch (e) {

@@ -12,8 +12,25 @@ export const LESSON_SYSTEM =
 
 const bullets = (items) => items.map((s) => `- ${s}`).join('\n');
 
-export function lessonPrompt(doc, node, fallback = {}) {
-  if (!doc || !node) return plainPrompt(fallback);
+/* Ask the model for its own questions.
+ *
+ * Normally the checks come from the syllabus, where each is tagged to an atom
+ * and its distractors are drawn from named misconceptions — far better than
+ * anything a lesson-writing call would invent. But when the syllabus itself
+ * fell back, its "checks" are template filler ("the accurate statement", "the
+ * words are interchangeable"), and filler shown to a learner is worse than a
+ * question the model made up about what it just taught. */
+const QUIZ_ASK = `
+Then write TWO multiple-choice questions on what you just taught:
+{"checks": [{"question": "...", "options": ["a","b","c","d"],
+             "answerIndex": 0, "explanation": "why that one is right"}]}
+- Exactly four options each, one unambiguously correct.
+- The wrong ones must be plausible mistakes a learner would actually make —
+  never "none of these", never a restatement of another option.
+- Ask about the substance, not about vocabulary or about the lesson itself.`;
+
+export function lessonPrompt(doc, node, fallback = {}, { needChecks = false } = {}) {
+  if (!doc || !node) return plainPrompt(fallback, needChecks);
 
   const byKc = new Map(doc.kcs.map((k) => [k.id, k]));
   const label = (id) => byKc.get(id)?.label || id;
@@ -43,29 +60,31 @@ without stating them so baldly that they stick:
 ${bullets(wrong)}` : ''}
 
 Write the lesson as JSON:
-{"content": ["paragraph 1", "paragraph 2", "paragraph 3"]}
+{"content": ["paragraph 1", "paragraph 2", "paragraph 3"]${needChecks ? ', "checks": [ ... ]' : ''}}
 
 Rules:
-- 2 to 4 short paragraphs, aimed at ${doc.goal?.audience || 'a curious adult'}.
-- Include one concrete worked example with real numbers or a real case — not an
-  analogy standing in for one.
-- Then a "now you try", with ${scaffold} support: ${support}.
+- Exactly 3 short paragraphs, aimed at ${doc.goal?.audience || 'a curious adult'}.
+- At most 60 words each. This is read on a phone, on a platform in the sky —
+  someone who wanted an essay would not be here.
+- One concrete worked example with real numbers or a real case, not an analogy
+  standing in for one.
+- Close with a "now you try", with ${scaffold} support: ${support}.
 - Plain language. No preamble, no "in this lesson we will".
-- Do not write a quiz; the checks already exist.`;
+${needChecks ? QUIZ_ASK : '- Do not write a quiz; the checks already exist.'}`;
 }
 
 /** When the platform cannot be located — an old client, or a stale title. */
-function plainPrompt({ topic, title, summary }) {
+function plainPrompt({ topic, title, summary }, needChecks = false) {
   return `Course: "${topic}". Current lesson: "${title}" — ${summary}.
 
 Write the lesson as JSON:
-{"content": ["paragraph 1", "paragraph 2", "paragraph 3"]}
+{"content": ["paragraph 1", "paragraph 2", "paragraph 3"]${needChecks ? ', "checks": [ ... ]' : ''}}
 
 Rules:
-- 2 to 4 short paragraphs. Concrete, friendly, plain language.
+- Exactly 3 short paragraphs, at most 60 words each. Concrete, friendly, plain.
 - Include one vivid worked example.
 - Teach THIS lesson only; assume its prerequisites are already held.
-- Do not write a quiz.`;
+${needChecks ? QUIZ_ASK : '- Do not write a quiz.'}`;
 }
 
 /* Read the model's reply.
@@ -81,19 +100,26 @@ export function readLesson(raw) {
   const content = Array.isArray(raw.content) ? raw.content.map(String).filter(Boolean).slice(0, 6) : [];
   if (!content.length) return null;
 
-  const c = raw.check;
+  // A model asked for questions answers with `checks`; one that volunteered a
+  // single one answers with `check`. Take either, keep only the complete ones —
+  // a half-written question is worse than none.
+  const offered = Array.isArray(raw.checks) ? raw.checks : raw.check ? [raw.check] : [];
+  const checks = offered.map(readCheck).filter(Boolean).slice(0, 4);
+
+  if (!checks.length) return { content };
+  return { content, checks, check: checks[0] };
+}
+
+function readCheck(c) {
   const options = Array.isArray(c?.options) ? c.options.map(String).slice(0, 4) : [];
   const answerIndex = Number(c?.answerIndex);
   const usable =
     typeof c?.question === 'string' &&
     options.length === 4 &&
+    new Set(options).size === 4 &&
     Number.isInteger(answerIndex) &&
     answerIndex >= 0 &&
     answerIndex < 4;
-
-  if (!usable) return { content };
-  return {
-    content,
-    check: { question: c.question, options, answerIndex, explanation: String(c.explanation || '') },
-  };
+  if (!usable) return null;
+  return { question: c.question, options, answerIndex, explanation: String(c.explanation || '') };
 }

@@ -12,3 +12,6 @@ server.log
 .env
 .env.*
 !.env.example
+
+# temporary observability trace (see server.mjs)
+.observe/
