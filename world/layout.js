@@ -381,6 +381,13 @@ function attempt(order, byId, bounds, wide, hug, allowCross) {
           u: p.u, v: p.v,
           lo: under.z < p.z0 ? { ...under } : { from: p.from, to: p.to, z: p.z0 },
           hi: under.z < p.z0 ? { from: p.from, to: p.to, z: p.z0 } : { ...under },
+          // Which two edges of the graph meet here. `from`/`to` above are
+          // socket SIDES; these are node ids, and the renderer needs them to
+          // know how far out of the mist this cell has come.
+          edges: [
+            { from: o.route.from, to: o.route.to },
+            { from: fromId, to: toId },
+          ],
         });
         crossable.delete(k);                         // one crossing per cell
         return;

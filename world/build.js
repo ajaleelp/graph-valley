@@ -41,7 +41,11 @@ export function build(graph, opts = {}) {
     claim(r.to, bc.u, bc.v, r.exitSide);
   }
 
-  const goalIds = new Set(L.nodes.filter((n) => n.depth === L.maxDepth).map((n) => n.id));
+  // The curriculum names its own summit; depth is only the fallback for graphs
+  // that do not (the authored test graphs, and any raw DAG).
+  const flagged = L.nodes.filter((n) => n.goal);
+  const goalIds = new Set((flagged.length ? flagged : L.nodes.filter((n) => n.depth === L.maxDepth))
+    .map((n) => n.id));
   const slices = [];
 
   // Deal features round-robin rather than hashing them. A hash on sequential
@@ -69,12 +73,22 @@ export function build(graph, opts = {}) {
     r.cells.forEach((c, i) => {
       if (c.cross) return;                            // emitted once, as a crossing
       const spec = { u: c.u, v: c.v, from: c.from, to: c.to, z0: c.z0, z1: c.z1, id: `${r.from}>${r.to}:${i}` };
-      slices.push(c.straight ? straight(spec) : corner(spec));
+      const sl = c.straight ? straight(spec) : corner(spec);
+      // Which two concepts this stretch of walkway joins. The renderer colours
+      // a path by the places at its ends — you can see the bridge you are about
+      // to take leading off into the mist — and that needs naming them.
+      sl.edgeFrom = r.from;
+      sl.edgeTo = r.to;
+      slices.push(sl);
     });
   }
 
   // One slice carries both paths where a route bridges another.
-  for (const x of L.crossings) slices.push(crossing({ ...x, id: `cross:${x.u},${x.v}` }));
+  for (const x of L.crossings) {
+    const sl = crossing({ ...x, id: `cross:${x.u},${x.v}` });
+    sl.edges = x.edges;
+    slices.push(sl);
+  }
 
   /* ---- stitch: verify every seam, and join the nav graph through it ------ */
 
@@ -133,6 +147,9 @@ export function build(graph, opts = {}) {
     // you on the step you actually clicked; at a crossing it also picks the
     // right one of the two paths, since each deck is its own group.
     for (const g of s.groups) {
+      g.edgeFrom = s.edgeFrom;
+      g.edgeTo = s.edgeTo;
+      g.edges = s.edges;
       const gx = (g.x0 + g.x1) / 2, gy = (g.y0 + g.y1) / 2, gz = g.z1;
       g.navAt = s.nav.nodes.map((n) => n.p).sort((a, b) =>
         Math.hypot(a.x - gx, a.y - gy, (a.z - gz) * 2)

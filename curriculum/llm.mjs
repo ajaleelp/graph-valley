@@ -7,7 +7,12 @@
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+// Not mini. Asked for six to sixteen atoms it returns four, asked for concrete
+// cluster titles it returns "Economic Factors, Political Factors", and asked to
+// vary Bloom levels it flattens everything to "understand" — it passes one
+// topic in five, and the retry does not reliably rescue it. A default that is
+// documented as not good enough is just a bug with a footnote.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 export const hasKey = () => !!(ANTHROPIC_KEY || OPENAI_KEY);
 

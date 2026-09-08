@@ -1,7 +1,17 @@
 /* Graph Valley — front end: world rendering, traversal, lessons. */
 
-import { P } from './iso.js';
-import { layout, buildScene, hash } from './world.js';
+import { P, depthSort, screenBox } from '/world/iso.js';
+import { build } from '/world/build.js';
+import { CELL, DECK } from '/world/slices.js';
+import { findWalk, nearestNode, navKey } from '/world/nav.js';
+import { plan as planWalk, at as walkAt, duration, traveller, orderWith } from '/world/walk.js';
+
+/* Stable hash so a topic always produces the same chapter palette. */
+function hash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < String(str).length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -68,7 +78,7 @@ const dimTri = (tri) => tri.map((c) => dim(c));
 
 const S = {
   topic: null, title: null, graph: null, source: null,
-  done: new Set(), scene: null, edgeMap: new Map(), nodeById: new Map(),
+  done: new Set(), world: null, courts: [], nodeById: new Map(), elFor: new Map(), her: null,
   groupEls: [], visOrder: [], avIdx: -1,
   lessonCache: new Map(), currentNode: null, at: null, walking: false,
   chapter: CHAPTERS[0], reduced: false,
@@ -150,6 +160,14 @@ function applyChapter(topic) {
 
 /* ----------------------------- world rendering --------------------------- */
 
+function shapesInto(node, g) {
+  for (const sh of g.shapes) {
+    node.appendChild(sh.tag === 'path'
+      ? el('path', { class: sh.cls, d: sh.d })
+      : el('polygon', { class: sh.cls, points: sh.pts }));
+  }
+}
+
 function renderWorld() {
   const host = $('#world-structure');
   const av = $('#avatar');
@@ -157,104 +175,114 @@ function renderWorld() {
   av.remove();
   lamp.remove();
   host.textContent = '';
-  const frag = document.createDocumentFragment();
-  S.groupEls = [];
 
-  for (const g of S.scene.groups) {
-    const node = el('g', { class: g.kind === 'node' ? 'grp monument' : 'grp span' });
-    if (g.nodeId) {
-      node.setAttribute('data-node', g.nodeId);
+  const frag = document.createDocumentFragment();
+  S.elFor = new Map();
+  for (const g of S.world.groups) {
+    const node = el('g', { class: g.slice === 'court' ? 'grp monument' : 'grp span' });
+    if (g.slice === 'court') {
+      node.setAttribute('data-node', g.id);
       node.setAttribute('tabindex', '0');
       node.setAttribute('role', 'button');
+    } else if (g.navAt) {
+      // Every walkable surface is a destination, not only the courts. This is
+      // also what stops a bridge drawn in front of a platform from swallowing
+      // the click meant for it: the bridge is a place you can go.
+      node.setAttribute('data-nav', navKey(g.navAt));
+      node.setAttribute('data-label', g.navLabel || 'the path');
     }
-    if (g.from) { node.setAttribute('data-from', g.from); node.setAttribute('data-to', g.to); }
-    for (const s of g.shapes) {
-      node.appendChild(s.tag === 'path'
-        ? el('path', { class: s.cls, d: s.d })
-        : el('polygon', { class: s.cls, points: s.pts }));
-    }
-    S.groupEls.push(node);
+    shapesInto(node, g);
+    S.elFor.set(g, node);
     frag.appendChild(node);
   }
   host.appendChild(frag);
   host.appendChild(av);
   host.appendChild(lamp);
-  S.avIdx = -1;
+
   renderLabels();   // must exist before paintStatus fills in their names
   paintStatus();
 }
 
-/* Draw the unrevealed world BEHIND the revealed one.
-   In this projection later layers sit nearer the camera, so left in their true
-   depth order the mist would fall in front of the monuments you can actually
-   see and turn them milky. Ghosts belong behind; the moment a place is
-   revealed it drops back into its real position. Within each band the exact
-   depth order is preserved. */
-function layerMist() {
-  const host = $('#world-structure');
-  const frag = document.createDocumentFragment();
-  S.visOrder = [];
-  for (const band of ['far', 'near', 'clear']) {
-    S.scene.groups.forEach((g, i) => {
-      if (g.veil !== band) return;
-      frag.appendChild(S.groupEls[i]);
-      if (band === 'clear') S.visOrder.push({ g, el: S.groupEls[i] });
-    });
-  }
-  host.appendChild(frag);
-  host.appendChild($('#avatar'));
-  host.appendChild($('#avatar-lamp'));
-  S.avIdx = -1;
-  sortAvatar();
-}
+/* The draw order, recomputed every frame with the traveller in it.
+ *
+ * She is SORTED INTO the scene rather than inserted into a precomputed order.
+ * The tempting optimisation — settle the static world once, then find the one
+ * slot she belongs in — is unsound, and it is the bug the old renderer shipped
+ * with. The order is a topological sort of a PARTIAL order, so two groups that
+ * cannot be compared are separated by an arbitrary tie-break; she can be in
+ * front of the one the tie-break put last and behind the one it put first, and
+ * then no single slot satisfies both. `sortAvatar` chose the safer half of that
+ * constraint and still got it wrong, just less visibly.
+ *
+ * Mist rides on top of the same pass. Unrevealed stone is drawn BEHIND
+ * everything revealed: later layers sit nearer the camera in this projection,
+ * so left in true depth order the ghosts would fall in front of the monuments
+ * you can actually see and turn them milky. Within each band the exact depth
+ * order is preserved, and she is always in the clear band.
+ */
+const BANDS = ['far', 'near', 'clear'];
 
-/* Slot the traveller into the painter's order for wherever she is standing.
-   She used to be drawn last, which is what made her look like she was flying
-   over the world: nothing could ever pass in front of her. Now she is a small
-   box like any other, so the near flank of a monument hides her as she passes
-   behind it and an arch passes over her head. */
-function sortAvatar() {
-  const vis = S.visOrder;
-  if (!vis || !vis.length) return;
-  const p = avatarPos;
-  const x0 = p.x - 0.4, y0 = p.y - 0.4, z0 = p.z;
-  let idx = 0;
-  for (let i = 0; i < vis.length; i++) {
-    const g = vis[i].g;
-    // the piece lies entirely on her far side along some axis, so it is behind
-    if (g.x1 <= x0 + 1e-6 || g.y1 <= y0 + 1e-6 || g.z1 <= z0 + 1e-6) idx = i + 1;
+function reorder() {
+  const host = $('#world-structure');
+  const her = S.her;
+  const ordered = her ? orderWith(S.world.groups, her) : depthSort(S.world.groups);
+
+  const bands = { far: [], near: [], clear: [] };
+  for (const g of ordered) bands[g === her ? 'clear' : (g.veil || 'clear')].push(g);
+
+  // Reconcile against the order rather than rebuilding the DOM. The world's
+  // groups keep their relative places between frames, so the common case moves
+  // exactly one element even though every one is checked.
+  let node = host.firstChild;
+  for (const band of BANDS) {
+    for (const g of bands[band]) {
+      const wanted = g === her ? $('#avatar') : S.elFor.get(g);
+      if (!wanted) continue;
+      if (node === wanted) { node = node.nextSibling; continue; }
+      host.insertBefore(wanted, node);
+    }
   }
-  if (idx === S.avIdx) return;
-  S.avIdx = idx;
-  $('#world-structure').insertBefore($('#avatar'), idx < vis.length ? vis[idx].el : null);
-  $('#world-structure').appendChild($('#avatar-lamp'));
+  host.appendChild($('#avatar-lamp'));
 }
 
 const VEIL_RANK = { far: 0, near: 1, clear: 2 };
+const moreRevealed = (a, b) => (VEIL_RANK[a] >= VEIL_RANK[b] ? a : b);
 
 function paintStatus() {
-  const veil = new Map(S.graph.nodes.map((n) => [n.id, veilOf(n)]));
+  const veil = new Map(S.courts.map((n) => [n.id, veilOf(n)]));
   // A path is as visible as the more revealed of the two places it joins, so
   // you can see the bridge you are about to take leading off into the mist.
-  const legVeil = (a, b) =>
-    VEIL_RANK[veil.get(a)] >= VEIL_RANK[veil.get(b)] ? veil.get(a) : veil.get(b);
+  const legVeil = (a, b) => moreRevealed(veil.get(a) || 'far', veil.get(b) || 'far');
+  const legStatus = (a, b) =>
+    S.done.has(a) && S.done.has(b) ? 'complete' : S.done.has(a) ? 'available' : 'locked';
 
-  for (const g of $$('#world-structure .monument')) {
-    const n = S.nodeById.get(g.dataset.node);
-    g.setAttribute('data-st', statusOf(n));
-    g.setAttribute('data-veil', veil.get(n.id));
-    g.classList.toggle('is-goal', !!n.goal);
+  for (const g of S.world.groups) {
+    if (g.slice === 'court') {
+      g.veil = veil.get(g.id) || 'far';
+      g.status = statusOf(S.nodeById.get(g.id));
+    } else if (g.edges) {
+      // A crossing carries two paths. It is as revealed, and as lit, as the
+      // more advanced of them — it is one piece of stone either way.
+      g.veil = g.edges.map((e) => legVeil(e.from, e.to)).reduce(moreRevealed);
+      g.status = g.edges.map((e) => legStatus(e.from, e.to))
+        .reduce((a, b) => (a === 'complete' || b === 'complete' ? 'complete'
+          : a === 'available' || b === 'available' ? 'available' : 'locked'));
+    } else if (g.edgeFrom) {
+      g.veil = legVeil(g.edgeFrom, g.edgeTo);
+      g.status = legStatus(g.edgeFrom, g.edgeTo);
+    } else {
+      g.veil = 'clear';
+      g.status = 'available';
+    }
+    const node = S.elFor.get(g);
+    if (!node) continue;
+    node.setAttribute('data-st', g.status);
+    node.setAttribute('data-veil', g.veil);
+    if (g.slice === 'court') node.classList.toggle('is-goal', !!S.nodeById.get(g.id)?.goal);
   }
-  for (const g of $$('#world-structure .span')) {
-    const a = S.nodeById.get(g.dataset.from), b = S.nodeById.get(g.dataset.to);
-    g.setAttribute('data-st', S.done.has(a.id) && S.done.has(b.id) ? 'complete'
-      : S.done.has(a.id) ? 'available' : 'locked');
-    g.setAttribute('data-veil', legVeil(a.id, b.id));
-  }
-  for (const g of S.scene.groups) {
-    g.veil = g.nodeId ? veil.get(g.nodeId) : legVeil(g.from, g.to);
-  }
-  layerMist();
+
+  reorder();
+
   for (const l of $$('#labels .mlabel')) {
     const n = S.nodeById.get(l.dataset.node);
     const st = statusOf(n);
@@ -269,7 +297,7 @@ function paintStatus() {
 function renderLabels() {
   const host = $('#labels');
   host.textContent = '';
-  for (const n of S.graph.nodes) {
+  for (const n of S.courts) {
     const b = document.createElement('button');
     b.className = 'mlabel';
     b.dataset.node = n.id;
@@ -329,21 +357,19 @@ function applyView() {
 /* The screen bounds of everything currently out of the mist. */
 function visibleBounds() {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const g of S.scene.groups) {
+  for (const g of S.world.groups) {
     if (g.veil === 'far') continue;
-    for (const X of [g.x0, g.x1]) for (const Y of [g.y0, g.y1]) for (const Z of [g.z0, g.z1]) {
-      const p = P(X, Y, Z);
-      if (p.x < x0) x0 = p.x;
-      if (p.x > x1) x1 = p.x;
-      if (p.y < y0) y0 = p.y;
-      if (p.y > y1) y1 = p.y;
-    }
+    const b = screenBox(g);
+    if (b.x0 < x0) x0 = b.x0;
+    if (b.x1 > x1) x1 = b.x1;
+    if (b.y0 < y0) y0 = b.y0;
+    if (b.y1 > y1) y1 = b.y1;
   }
-  return Number.isFinite(x0) ? { x0, y0, x1, y1 } : S.scene.bounds;
+  return Number.isFinite(x0) ? { x0, y0, x1, y1 } : S.world.bounds;
 }
 
 function fitView(animate = false) {
-  if (!S.scene) return;
+  if (!S.world) return;
   const r = $('#world').getBoundingClientRect();
   const b = visibleBounds();
   const pad = r.width < 700 ? 40 : 110;
@@ -385,6 +411,7 @@ function glideTo(target, ms = 700) {
 
 function bindCamera() {
   const svg = $('#world');
+  let hit = null;
   let start = null;
   const pointers = new Map();
   let pinch = null;
@@ -452,12 +479,31 @@ function bindCamera() {
     applyView();
   }, { passive: false });
 
-  // clicking the stone itself travels there, not just the label
-  $('#world-structure').addEventListener('click', (e) => {
+  /* What a press landed on is read at POINTERDOWN, not at pointerup.
+   *
+   * setPointerCapture retargets every later event for that pointer to the
+   * capture element, so by the time the click fires e.target IS the <svg> and
+   * closest('[data-node]') is null however carefully you aimed. Capture is
+   * worth keeping — it holds a pan together when the pointer leaves the window
+   * — so the fix is to remember what was under the pointer when it went down. */
+  svg.addEventListener('pointerdown', (e) => {
+    const t = e.target;
+    const court = t.closest?.('[data-node]');
+    const path = t.closest?.('[data-nav]');
+    hit = court ? { node: court.dataset.node }
+      : path ? { nav: path.dataset.nav, label: path.dataset.label }
+      : null;
+  }, true);
+
+  const release = (e) => {
+    const h = hit;
+    hit = null;
     if (didDrag) { didDrag = false; return; }
-    const g = e.target.closest('[data-node]');
-    if (g) onNodeClick(g.dataset.node);
-  });
+    if (!h) return;
+    if (h.node) onNodeClick(h.node);
+    else if (h.nav) onPathClick(h.nav);
+  };
+  svg.addEventListener('pointerup', release);
   $('#world-structure').addEventListener('keydown', (e) => {
     const g = e.target.closest('[data-node]');
     if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onNodeClick(g.dataset.node); }
@@ -467,144 +513,96 @@ function bindCamera() {
 
 /* -------------------------------- avatar -------------------------------- */
 
+/* Move her, and settle the draw order around her.
+ *
+ * She is DRAWN as the hand-made figure in index.html, but she is SORTED as the
+ * box `traveller()` builds: a flat drawing has no extent in the grid, and the
+ * depth sort needs something it can compare against a deck, a tread and an
+ * arch. The box is the slightly more generous of the two, so she is never
+ * revealed by stone that should have hidden her. */
 function drawAvatar(pt) {
   const p = P(pt.x, pt.y, pt.z);
   const t = `translate(${p.x} ${p.y})`;
   $('#avatar').setAttribute('transform', t);
   $('#avatar-lamp').setAttribute('transform', t);
   avatarPos = pt;
-  sortAvatar();
+  S.her = traveller(pt);
+  reorder();
 }
 
-function placeAvatar(node) {
-  S.at = node.id;
-  drawAvatar(node.stand);
+function placeAvatar(court) {
+  S.at = court.id;
+  drawAvatar(court.stand);
 }
 
-const edgeKey = (a, b) => `${a} ${b}`;
+/* Where she can walk, and how.
+ *
+ * There is no second representation to keep in step any more. Each slice puts
+ * a nav node at each of its open sockets, so two slices that stitch share a
+ * node by coordinate and the nav graph is connected IF AND ONLY IF the geometry
+ * is. The old renderer carried `edges[].walk` polylines alongside the stone and
+ * needed `assertOnStone` to catch it out when the two disagreed; that whole
+ * failure mode is gone, along with the function that policed it.
+ */
 
-/* Fewest-hops path across the causeway network.
-   The adjacency is built from the causeways that were actually carved, not
-   from every dependency — the world only builds stone for the transitive
-   reduction, and routing over an edge with no stone under it would teleport
-   the traveller through open sky. */
-function findPath(fromId, toId) {
-  if (fromId === toId) return [fromId];
-  const adj = new Map(S.graph.nodes.map((n) => [n.id, []]));
-  for (const e of S.scene.edges) {
-    adj.get(e.from).push(e.to);
-    adj.get(e.to).push(e.from);
-  }
-  const prev = new Map([[fromId, null]]);
-  const q = [fromId];
-  while (q.length) {
-    const u = q.shift();
-    if (u === toId) break;
-    for (const v of adj.get(u) || []) if (!prev.has(v)) { prev.set(v, u); q.push(v); }
-  }
-  if (!prev.has(toId)) return [fromId, toId];
-  const path = [];
-  for (let c = toId; c !== null; c = prev.get(c)) path.unshift(c);
-  return path;
+/* The route to a nav node, starting from wherever she actually is. Interrupt a
+ * walk and she re-paths from the node she is nearest, with her exact position
+ * on the front, so she carries on from where she stands rather than snapping
+ * back to where the last walk began. */
+function routeTo(targetKey) {
+  if (!S.world.nav.pos.has(targetKey)) return null;
+  const here = { ...avatarPos };
+  const from = S.walking ? nearestNode(S.world.nav, here) : navKey(here);
+  const found = findWalk(S.world.nav, from, targetKey);
+  if (!found || !found.length) return null;
+  return navKey(found[0]) === navKey(here) ? found : [here, ...found];
 }
 
-/* The real causeway geometry for a hop sequence — the avatar walks the stone
-   that is actually drawn, staircases included. */
-function routePoints(path) {
-  const out = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i], b = path[i + 1];
-    const fwd = S.edgeMap.get(edgeKey(a, b));
-    const rev = S.edgeMap.get(edgeKey(b, a));
-    if (fwd) out.push(...fwd.walk);
-    else if (rev) out.push(...[...rev.walk].reverse());
-    out.push(S.nodeById.get(b).stand);
-  }
-  // She may already be part-way along this route — waiting at a junction, say.
-  // Rejoin it where she stands instead of walking back to the start first.
-  let at = -1, best = 0.9;
-  for (let i = 0; i < out.length; i++) {
-    const d = Math.hypot(out[i].x - avatarPos.x, out[i].y - avatarPos.y, out[i].z - avatarPos.z);
-    if (d < best) { best = d; at = i; }
-  }
-  return [avatarPos, ...out.slice(at + 1)];
+let walkRaf = null, walkGuard = null;
+
+function stopWalk() {
+  cancelAnimationFrame(walkRaf);
+  clearTimeout(walkGuard);
+  S.walking = false;
+  $('#avatar').classList.remove('walking');
 }
 
-/* Consecutive waypoints must differ on at most one horizontal axis: the
-   causeways are axis-aligned, so a diagonal step would cut across open sky. */
-function assertOnStone(pts) {
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1], b = pts[i];
-    if (Math.abs(b.x - a.x) > 0.02 && Math.abs(b.y - a.y) > 0.02) return false;
-  }
-  return true;
-}
+/* Walk a nav path at an even pace, with the camera following. */
+function animateWalk(path, done) {
+  if (!path || path.length < 2) { done && done(); return; }
+  const pl = planWalk(path);
+  const end = path[path.length - 1];
 
-let walkRaf = null;
-
-/* Walk a polyline of grid points, at an even pace, with the camera following. */
-function animateWalk(pts, done) {
-  if (S.walking) return;
-  if (!assertOnStone(pts)) {
-    // No continuous walkway. Better to step there than to glide across open
-    // sky, which is the one thing that reads as broken.
-    const end = pts[pts.length - 1];
+  if (S.reduced || pl.total < 0.5) {
+    stopWalk();
     drawAvatar(end);
     focusOn(end, null, false);
     done && done();
     return;
   }
-  if (S.reduced) {
-    const end = pts[pts.length - 1];
-    drawAvatar(end);
-    focusOn(end, null, false);
-    done && done();
-    return;
-  }
-  // arc-length parameterise in screen space so the pace reads evenly
-  const scr = pts.map((p) => P(p.x, p.y, p.z));
-  const seg = [];
-  let total = 0;
-  for (let i = 1; i < scr.length; i++) {
-    const d = Math.hypot(scr[i].x - scr[i - 1].x, scr[i].y - scr[i - 1].y);
-    seg.push(d);
-    total += d;
-  }
-  if (total < 1) {
-    drawAvatar(pts[pts.length - 1]);
-    done && done();
-    return;
-  }
 
-  const dur = clamp((total / 300) * 1000, 550, 5200);
-  const av = $('#avatar');
-  av.classList.add('walking');
-  S.walking = true;
+  const dur = duration(pl.total);
   const t0 = performance.now();
+  stopWalk();
+  S.walking = true;
+  $('#avatar').classList.add('walking');
 
-  // requestAnimationFrame stops in a backgrounded tab, and a throw inside the
-  // step would otherwise leave S.walking true forever and make the whole world
-  // unclickable. This guarantees the walk always ends.
+  // requestAnimationFrame does not fire in a backgrounded tab, and a walk that
+  // never finishes leaves S.walking true forever and makes the world
+  // unclickable. The guard promises the walk always ends.
   const arrive = () => {
     if (!S.walking) return;
-    cancelAnimationFrame(walkRaf);
-    clearTimeout(walkGuard);
-    S.walking = false;
-    av.classList.remove('walking');
-    const end = pts[pts.length - 1];
+    stopWalk();
     drawAvatar(end);
     focusOn(end, null, false);
     done && done();
   };
-  const walkGuard = setTimeout(arrive, dur + 600);
+  walkGuard = setTimeout(arrive, dur + 600);
 
   const step = (now) => {
-    const u = clamp((now - t0) / dur, 0, 1);
-    let want = u * total, i = 0;
-    while (i < seg.length - 1 && want > seg[i]) { want -= seg[i]; i++; }
-    const f = seg[i] ? clamp(want / seg[i], 0, 1) : 0;
-    const a = pts[i], b = pts[i + 1] || pts[i];
-    drawAvatar({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f });
+    if (!S.walking) return;
+    const u = (now - t0) / dur;
+    drawAvatar(walkAt(pl, u));
     focusOn(avatarPos, null, false);
     if (u < 1) { walkRaf = requestAnimationFrame(step); return; }
     arrive();
@@ -612,24 +610,49 @@ function animateWalk(pts, done) {
   walkRaf = requestAnimationFrame(step);
 }
 
-function walkTo(node, done) {
-  if (S.walking) return;
-  if (!S.at || S.at === node.id) { placeAvatar(node); done && done(); return; }
-  animateWalk(routePoints(findPath(S.at, node.id)), () => {
-    placeAvatar(node);
-    done && done();
-  });
+function walkTo(court, done) {
+  if (S.at === court.id && !S.walking) { done && done(); return; }
+  const path = routeTo(court.navKey);
+  if (!path) { placeAvatar(court); done && done(); return; }
+  animateWalk(path, () => { placeAvatar(court); done && done(); });
 }
 
-/* Walk out to where the onward paths actually diverge, and stop there. She is
-   still "at" the monument she came from; routePoints rejoins whichever route
-   she is sent on next from wherever she is standing. */
-function walkToJunction(n, done) {
-  if (!n.junctionWalk || S.walking) { done && done(); return; }
-  animateWalk([avatarPos, ...n.junctionWalk], done);
+/* Walk out to where the onward paths actually diverge, and stop there.
+ *
+ * The fork is the stretch every onward route shares — the common prefix of the
+ * nav walks to each option. She is still "at" the place she came from, and
+ * `routeTo` rejoins whichever route she is sent on next from where she stands.
+ */
+function junctionWalk(n, opts) {
+  const walks = opts.map((o) => findWalk(S.world.nav, n.navKey, o.navKey)).filter(Boolean);
+  if (walks.length < 2) return null;
+  const cap = Math.min(...walks.map((w) => w.length));
+  let i = 1;
+  while (i < cap && walks.every((w) => navKey(w[i]) === navKey(walks[0][i]))) i++;
+  return i > 1 ? walks[0].slice(0, i) : null;
+}
+
+function walkToJunction(n, opts, done) {
+  const w = junctionWalk(n, opts);
+  if (!w) { done && done(); return; }
+  animateWalk([{ ...avatarPos }, ...w.slice(1)], done);
 }
 
 /* -------------------------------- lessons ------------------------------- */
+
+/* Walking to a stretch of walkway. Monument Valley lets you tap any surface,
+ * and it removes the dead zone where a bridge drawn in front of a platform
+ * swallowed the click meant for it. Nothing is taught out here — she simply
+ * goes and stands where you pointed. */
+function onPathClick(key) {
+  if (!S.world?.nav.pos.has(key)) return;
+  hideChoice();
+  const path = routeTo(key);
+  if (!path) return;
+  // Only walk onto stone that is out of the mist; the rest is not there yet.
+  const dest = path[path.length - 1];
+  animateWalk(path, () => { S.at = null; drawAvatar(dest); });
+}
 
 function onNodeClick(id) {
   const n = S.nodeById.get(id);
@@ -718,12 +741,12 @@ function renderCheck(n, check) {
 }
 
 function completeNode(n) {
-  const before = new Set(S.graph.nodes.filter((x) => statusOf(x) === 'available').map((x) => x.id));
+  const before = new Set(S.courts.filter((x) => statusOf(x) === 'available').map((x) => x.id));
   S.done.add(n.id);
   saveGame();
   paintStatus();
   updateHud();
-  for (const m of S.graph.nodes) {
+  for (const m of S.courts) {
     if (statusOf(m) === 'available' && !before.has(m.id)) {
       const g = $(`#world-structure [data-node="${CSS.escape(m.id)}"]`);
       g?.classList.add('born');
@@ -737,11 +760,11 @@ function closeSheet() {
   $('#modal-backdrop').classList.remove('show');
   const n = S.currentNode;
   if (!n || n.goal) return;
-  const opts = S.graph.nodes.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
+  const opts = S.courts.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
   if (opts.length < 2) return;
   // Walk out to the fork first and ask there. Being asked which way to go
   // while still standing in the doorway is not a choice you can see.
-  walkToJunction(n, () => showChoice(opts));
+  walkToJunction(n, opts, () => showChoice(opts));
 }
 
 /* -------------------------- fork-in-the-road prompt ---------------------- */
@@ -777,7 +800,7 @@ function positionChoice() {
 
 function celebrate() {
   closeSheet();
-  const ordered = [...S.graph.nodes].sort((a, b) => a.depth - b.depth || a.gy - b.gy);
+  const ordered = [...S.courts].sort((a, b) => a.depth - b.depth || a.cell.v - b.cell.v);
   $('#recap').innerHTML = ordered.map((n) => `<li>${escapeHtml(n.title)}</li>`).join('');
   $('#cel-title').textContent = S.title || S.topic;
   $('#cel-overlay').classList.remove('hidden');
@@ -869,27 +892,43 @@ async function startJourney(topic, { restore = false } = {}) {
 
 function enterWorld() {
   applyChapter(S.topic);
-  layout(S.graph);
-  S.nodeById = new Map(S.graph.nodes.map((n) => [n.id, n]));
-  S.scene = buildScene(S.graph);
-  S.edgeMap = new Map(S.scene.edges.map((e) => [edgeKey(e.from, e.to), e]));
+  // The screen has to be showing before it can be measured: a hidden <svg>
+  // reports 0x0, and a world composed for a 0x0 viewport is composed for
+  // nothing. Show first, measure second, build third.
   showScreen('screen-world');
+
+  // The world's proportions are chosen from the screen it will be seen on:
+  // desktop and phone portrait are two octaves apart in aspect, and no single
+  // layout serves both. See world/compose.js.
+  const r = $('#world').getBoundingClientRect();
+  const viewport = [Math.max(320, r.width || 1024), Math.max(320, r.height || 640)];
+  S.world = build(S.graph, { viewport });
+  if (S.world.problems.length) console.warn('world problems:', S.world.problems);
+
+  S.courts = S.world.courts;
+  S.nodeById = new Map(S.courts.map((n) => [n.id, n]));
+  // The south corner of the deck, where a label hangs without covering the
+  // architecture standing on the far half.
+  for (const n of S.courts) {
+    const half = (n.span * CELL) / 2;
+    n.anchor = P(n.stand.x + half, n.stand.y + half, n.stand.z - DECK);
+  }
+
   renderWorld();
   fitView();
 
-  const start = S.graph.nodes.find((n) => n.depth === 0) || S.graph.nodes[0];
+  const start = S.courts.find((n) => n.depth === 0) || S.courts[0];
   placeAvatar(start);
   updateHud();
   // establishing wide shot of the whole journey, then move in to walking
   // distance — close enough that the traveller reads as a figure, but far
   // enough on a phone that you can still see where the path goes
-  const r = $('#world').getBoundingClientRect();
   setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.55 : 0.62), 950);
 }
 
 function updateHud() {
   $('#hud-title').textContent = S.title || S.topic || '';
-  const total = S.graph ? S.graph.nodes.length : 0;
+  const total = S.courts.length;
   $('#hud-count').textContent = `${S.done.size}/${total}`;
   $('#hud-fill').style.width = total ? `${(S.done.size / total) * 100}%` : '0%';
   $('#demo-badge').classList.toggle('hidden', S.source !== 'fallback');
@@ -923,7 +962,7 @@ function init() {
   $('#btn-home').addEventListener('click', () => { showScreen('screen-home'); refreshResume(); });
   $('#btn-fit').addEventListener('click', () => fitView(true));
   $('#btn-here').addEventListener('click', () => {
-    const next = S.graph?.nodes.find((n) => statusOf(n) === 'available') || S.nodeById.get(S.at);
+    const next = S.courts.find((n) => statusOf(n) === 'available') || S.nodeById.get(S.at);
     if (next) focusOn(next.stand, clamp(Math.max(view.k, 0.55), 0.14, 1.4));
   });
 
@@ -950,3 +989,13 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+/* A handle for driving the world from the console or a test harness — the same
+ * affordance the POC viewer carries. It exposes state and the two travel verbs;
+ * everything here is already reachable by clicking. */
+window.gv = {
+  S,
+  get at() { return avatarPos; },
+  walkTo, onNodeClick, onPathClick, routeTo, fitView, focusOn,
+  compose: () => S.world?.graph.compose,
+};
