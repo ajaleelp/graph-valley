@@ -247,7 +247,10 @@ function stats(world) {
 }
 
 function load(key) {
-  const world = build(GRAPHS[key]);
+  // Hand the builder the real viewport: compose.js chooses how the world folds
+  // from the shape of the screen it will be seen on, so the POC demonstrates
+  // that choice rather than hard-coding one side of it.
+  const world = build(GRAPHS[key], { viewport: [svg.clientWidth || 1200, svg.clientHeight || 800] });
   S.world = world;
   const start = world.courts.find((c) => c.depth === 0);
   stop();

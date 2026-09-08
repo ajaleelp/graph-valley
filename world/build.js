@@ -17,8 +17,8 @@ function hash(str) {
   return h >>> 0;
 }
 
-export function build(graph) {
-  const L = layout(graph);
+export function build(graph, opts = {}) {
+  const L = layout(graph, opts);
   const problems = L.problems.slice();
 
   // Which sides each court has to open. A court's sockets are derived from the

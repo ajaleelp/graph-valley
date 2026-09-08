@@ -17,7 +17,8 @@ import { FLOOR, OPP, AXIS, HEADROOM, sideBetween, courtSockets } from './slices.
 const ck = (c) => `${c.u},${c.v}`;
 const NEIGHBOURS = [['+x', 1, 0], ['-x', -1, 0], ['+y', 0, 1], ['-y', 0, -1]];
 const HUG = 40;   // cost of routing through a cell that touches someone else's court
-export const GAP = 2;  // free coarse cells between courts, over and above their span
+import { GAP, choose as composeFor, anchors } from './compose.js';
+export { GAP };
 
 /* ------------------------------------------------------------- structure -- */
 
@@ -145,12 +146,18 @@ function orderLayers(nodes, reduced, maxDepth) {
   return best;
 }
 
-/* Place each node on the coarse grid, once the lanes are settled. */
-export function placeNodes(nodes, reduced, maxDepth, step) {
+/* Place each node on the coarse grid, once the lanes are settled.
+ *
+ * Where a layer sits is decided by `plan`, chosen in compose.js from the shape
+ * of the screen the world will be seen on. The plan only moves courts around;
+ * every socket, seam and climb rule downstream is untouched by it. */
+export function placeNodes(nodes, reduced, maxDepth, plan) {
   const layers = orderLayers(nodes, reduced, maxDepth);
+  const anch = anchors(plan, maxDepth + 1);
   layers.forEach((layer, d) => {
     layer.forEach((n, i) => {
-      const cell = { u: d * step, v: centred(i, layer.length) * step };
+      const o = centred(i, layer.length);
+      const cell = { u: anch[d].u + o * plan.lane.u, v: anch[d].v + o * plan.lane.v };
       n.cell = cell;
       n.z = d * FLOOR;
       n.cells = [];
@@ -393,18 +400,25 @@ function attempt(order, byId, bounds, wide, hug, allowCross) {
   return { routes, failed, problems, crossings };
 }
 
-export function layout(graph) {
+export function layout(graph, { viewport = [1440, 810] } = {}) {
   const nodes = graph.nodes.map((n) => ({ ...n, deps: (n.deps || []).slice() }));
   depths(nodes);
   const maxDepth = Math.max(...nodes.map((n) => n.depth));
   const reduced = transitiveReduction(nodes);
   const maxSpan = assignSpans(nodes);
 
+  // How many nodes share each depth layer: the fold has to drop far enough to
+  // clear the tallest stack of siblings, so the choice depends on this.
+  const laneCounts = Array.from({ length: maxDepth + 1 }, () => 0);
+  for (const n of nodes) laneCounts[n.depth]++;
+
   // Two free columns between layers, whatever the widest court is. One is not
   // enough: every route between two layers would have to thread the same
   // column, and routes reserve cells from each other.
   const step = GAP + maxSpan;
-  placeNodes(nodes, reduced, maxDepth, step);
+  const chosen = composeFor({ layers: maxDepth + 1, laneCounts, span: maxSpan, viewport });
+  const plan = chosen.plan;
+  placeNodes(nodes, reduced, maxDepth, plan);
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   const us = nodes.flatMap((n) => n.cells.map((c) => c.u));
@@ -446,5 +460,6 @@ export function layout(graph) {
   return {
     nodes, byId, routes: best.routes, crossings: best.crossings,
     maxDepth, step, bounds: wide, problems,
+    compose: { plan, box: chosen.box, score: chosen.score, viewport },
   };
 }

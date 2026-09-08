@@ -46,10 +46,19 @@ export function at({ path, seg, total }, u) {
   return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f };
 }
 
+/* The largest step she may take between two frames, in world units. Above this
+ * the motion stops reading as walking and starts reading as a skip. At 60fps
+ * and full zoom it is about 34px on screen. */
+const MAX_STEP = 1.4;
+const FRAME = 1000 / 60;
+
 /* How long the walk should take, in ms. Capped so a long journey stays
- * watchable, floored so a single hop is not a snap. */
+ * watchable, floored so a single hop is not a snap — and then stretched again
+ * if the cap would force her to move faster than MAX_STEP per frame. A folded
+ * world can put a band change several hundred units long in front of her, and
+ * six seconds is not enough to cross that on foot. */
 export function duration(total) {
-  return Math.max(450, Math.min(6000, total * 70));
+  return Math.max(450, Math.min(6000, total * 70), (total / MAX_STEP) * FRAME);
 }
 
 /* The traveller: a shadow, a body, a hat brim and a head, as one group with a

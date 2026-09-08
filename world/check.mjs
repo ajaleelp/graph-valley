@@ -10,7 +10,9 @@ import { GRAPHS, randomGraph } from './graphs.js';
 import { findWalk, reachable } from './nav.js';
 import { plan, at, duration, traveller, orderWith, HEIGHT, HALF } from './walk.js';
 import { OPP, DELTA, socketPos, HEADROOM, AXIS, SLAB, INSET } from './slices.js';
-import { order as frontOf, screenBox } from './iso.js';
+import { order as frontOf, screenBox, P } from './iso.js';
+import { anchors, courtScreen, score, candidates, clearance } from './compose.js';
+import { CELL, FLOOR } from './slices.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -229,7 +231,84 @@ function distToSegment(p, a, b) {
 
 const navKeyOf = (p) => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`;
 
-console.log('--- authored graphs ---');
+/* ------------------------------- composition ----------------------------- */
+
+/* The claims compose.js rests on, checked rather than trusted.
+ *
+ * These are arithmetic identities, so they are exact: a level band must be
+ * EXACTLY level, or the world does not read as rows, and a fold must drop
+ * EXACTLY straight down, or the bands shear. */
+const VIEWPORTS = { desktop: [1440, 810], tablet: [834, 1112], phone: [390, 844] };
+
+function checkComposition() {
+  const SPAN = 2;
+
+  // A layer anchor projected to screen. Depth d always climbs d*FLOOR.
+  const at = (a, d) => P(a.u * CELL, a.v * CELL, d * FLOOR);
+
+  for (const bands of [1, 2, 3, 5]) {
+    const plan = { mode: 'band', bands, step: clearance(SPAN), fold: 9,
+      lane: { u: clearance(SPAN), v: clearance(SPAN) } };
+    const anch = anchors(plan, 12);
+    let levels = 0, folds = 0, shear = 0, skew = 0;
+    for (let d = 1; d < 12; d++) {
+      const a = at(anch[d - 1], d - 1), b = at(anch[d], d);
+      if (d % bands === 0) {                      // a fold: straight down the screen
+        folds++;
+        if (Math.abs(b.x - a.x) > 1e-9) shear++;
+        if (b.y <= a.y) shear++;                  // and it must go DOWN, not up
+      } else {                                    // within a band: exactly level
+        levels++;
+        if (Math.abs(b.y - a.y) > 1e-9) skew++;
+      }
+    }
+    check(`compose/${bands}: bands are exactly level`, skew === 0, `${skew} of ${levels} sheared`);
+    check(`compose/${bands}: folds drop straight down`, shear === 0, `${shear} of ${folds} off-vertical`);
+  }
+
+  // The model predicts how much screen a court takes. If that drifts out of
+  // step with slices.js, every score computed from it is quietly wrong.
+  const w = build(GRAPHS.diamond);
+  const per = new Map();
+  for (const s of w.slices) {
+    if (s.kind !== 'court') continue;
+    for (const g of s.groups) {
+      const b = screenBox(g), c = per.get(s.id) || { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+      c.x0 = Math.min(c.x0, b.x0); c.x1 = Math.max(c.x1, b.x1);
+      c.y0 = Math.min(c.y0, b.y0); c.y1 = Math.max(c.y1, b.y1);
+      per.set(s.id, c);
+    }
+  }
+  const model = courtScreen(SPAN);
+  let realW = 0, realH = 0;
+  for (const c of per.values()) { realW = Math.max(realW, c.x1 - c.x0); realH = Math.max(realH, c.y1 - c.y0); }
+  check('compose: court width matches the geometry', Math.abs(model.w - realW) < 1e-6, `${model.w} vs ${realW}`);
+  // The height model uses the tallest feature a court MAY carry, so it is an
+  // upper bound: never under the real thing, never wildly over it.
+  check('compose: court height bounds the geometry',
+    model.h >= realH && model.h <= realH * 1.25, `model ${model.h.toFixed(0)} vs real ${realH.toFixed(0)}`);
+
+  // The point of all this: every world composes on every screen we target.
+  // A penalty of 1 octave means the world is twice as wide, relative to the
+  // screen, as it should be — past that it reads as a stripe.
+  for (const [name, g] of Object.entries(GRAPHS)) {
+    for (const [vn, vp] of Object.entries(VIEWPORTS)) {
+      const built = build(g, { viewport: vp });
+      const c = built.graph.compose;
+      check(`${name}/${vn}: composes on the screen`, c.score.aspect <= 1.1,
+        `aspect penalty ${c.score.aspect.toFixed(2)}`);
+      check(`${name}/${vn}: fills the screen`, c.score.fill >= 0.45,
+        `fill ${c.score.fill.toFixed(2)}`);
+      check(`${name}/${vn}: still routes`, built.problems.length === 0,
+        built.problems.slice(0, 2).join('; '));
+    }
+  }
+}
+
+console.log('--- composition ---');
+checkComposition();
+
+console.log('\n--- authored graphs ---');
 for (const [key, g] of Object.entries(GRAPHS)) {
   const w = verify(key, g);
   console.log(
