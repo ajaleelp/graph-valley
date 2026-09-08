@@ -1,7 +1,10 @@
 # Slice POC — from a concept graph to a walkable Monument Valley world
 
-An independent proof of concept, in `poc/`. It shares nothing with the app in
-`server.mjs` / `public/` except an idea about isometric projection.
+**The engine this exercised now ships.** It lives in `world/`, and `public/`
+renders with it — see section 5 of [CHALLENGES.md](../CHALLENGES.md). What is
+left here is the whitebox lab: the same engine with the curriculum, the palette
+and the art out of the way, which is where you debug geometry. The claims below
+are still checked, by `world/check.mjs`, on every build.
 
 **The question:** given a few connected concepts, can we build a walkable
 isometric world in the register of Monument Valley out of a **small library of
@@ -11,7 +14,7 @@ reusable template slices**, stitched seamlessly?
 whitebox — four flat materials, no lighting, no mist, no art direction.
 
 ```bash
-node poc/check.mjs                              # verify every claim below, headless
+node world/check.mjs                            # verify every claim below, headless
 node poc/serve.mjs                              # viewer at http://localhost:5174
 node poc/render.mjs deep out.svg --at p4 --nav  # render a world to a file
 ```
@@ -66,8 +69,10 @@ to know.
 ## How a graph becomes a world
 
 1. **Depth** = longest path from a root, and depth becomes the floor: a node at
-   depth *d* sits at `z = d·FLOOR` and coarse column `u = d·step`. Prerequisites
-   are literally lower and behind.
+   depth *d* sits at `z = d·FLOOR`. Where that lands on the coarse grid is
+   chosen by `world/compose.js` from the viewport — a diagonal run on landscape
+   screens, level bands folded into a serpentine on portrait ones. Either way
+   prerequisites are literally lower and behind.
 2. **Transitive reduction.** A DAG usually states a prerequisite twice; building
    stone for both lays a redundant walkway beside one that already exists.
 3. **Lanes** within a layer are settled by forward/backward barycentre sweeps —
@@ -127,14 +132,22 @@ A flight must present its surface at exactly `z0` at the entry edge and exactly
 `z1` at the exit edge, or the socket equality fails at the seam. Five treads
 flush at both ends gives four risers, so `FLOOR = 4`.
 
-That buys a second property free: the screen delta per depth layer is
-`(CELL·TW, CELL·TH − FLOOR·TZ)` = `(256, 128 − 128)` = `(256, 0)`. The terms
-cancel exactly, so **depth advances horizontally across the screen while
-climbing in world space**, and layers read as level bands.
+That buys a second property free. A layer step of `(a,b)` coarse cells carrying
+one `FLOOR` of climb lands at
 
-## What `check.mjs` proves
+```
+dx = (a − b)·CELL·TW = (a − b)·256      dy = (a + b)·CELL·TH − FLOOR·TZ = (a + b)·128 − 128
+```
 
-Over six authored graphs and 200 random DAGs — 1442 assertions:
+so `a + b = 1` makes `dy` **exactly** zero — the layer advances horizontally
+across the screen while climbing in world space, and a run of them reads as a
+level band. And `a = b` makes `dx` exactly zero, which is a fold straight down.
+Those two identities are the whole of `world/compose.js`.
+
+## What `world/check.mjs` proves
+
+Over six authored graphs and 200 random DAGs, on three reference viewports —
+3154 assertions:
 
 - **every seam is flush**, to 1e-9, re-derived independently of the builder;
 - **no two slices claim a cell**, and no socket opens onto empty space;
@@ -159,9 +172,12 @@ Over six authored graphs and 200 random DAGs — 1442 assertions:
 
 ## Known limits
 
-- **Worlds get wide.** Depth runs horizontally, so a nine-deep curriculum is a
-  long band. Fine to pan, but it is not a single-screen composition the way a
-  Monument Valley level is.
+- **Worlds get wide — on landscape screens, deliberately.** Depth runs
+  horizontally, and on a laptop that is the best use of the space. On portrait
+  screens `world/compose.js` folds the trail into level bands instead, chosen by
+  scoring candidate layouts against the actual viewport. The fold costs
+  1.1-1.5x the polygons and a good deal more walkway, which is why it is not
+  used everywhere.
 - **No impossible geometry.** Out of scope by instruction. The depth sort would
   need a different treatment for it.
 - **Whitebox only.** Four flat materials. No lighting, mist, occlusion of

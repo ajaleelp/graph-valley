@@ -94,7 +94,14 @@ not look like the reference.
   columns rather than five slender ones, and accent panels are inset so a rim
   of stone shows. Anything finer dissolves into fuzz when the camera pulls back.
 
-### How the trail works now
+### How the trail worked before the slice rebuild
+
+> **Superseded.** This describes `public/world.js`, deleted in the section 5
+> rebuild. It is kept because the projection arithmetic below is still exactly
+> what constrains the current layout — `world/compose.js` derives its level
+> bands and vertical folds from the same two identities — and because knowing
+> that this shape was tried, and why it read well, is worth more than the code
+> was.
 
 - **Serpentine layout.** Within a row the step between platforms is
   `(+STEP, -STEP, 0)`, which projects to pure screen *horizontal* — the two
@@ -188,109 +195,105 @@ which silently made the entire world unclickable. Every walk now has a
 
 ---
 
-## 5. The main product needs overhauling to match `poc/`
+## 5. The renderer overhaul — done, and what it cost
 
-`poc/` is an independent proof that a concept graph can be turned into a
-walkable Monument Valley world from **four reusable slice templates** stitched
-by a socket contract — see `poc/README.md`. It works, it is verified by 3090
-headless assertions over six authored graphs and 200 random DAGs, and it is
-better than what `public/` does in ways that are structural rather than
-cosmetic. The main renderer should be rebuilt on it. Until then this repo
-carries two world-builders that disagree.
+This section used to argue that `public/` should be rebuilt on `poc/`, because
+the repo carried two world-builders that disagreed and the one that shipped had
+four latent defects. That is done. What follows is the record.
 
-### What `public/` would gain
+**One engine.** The engine moved to a top-level `world/`, imported by the
+product, by the whitebox lab in `poc/`, and by `world/check.mjs`. Copying the
+POC into `public/` would have kept two builders with different names; promoting
+it means the assertions test shipped code. `public/iso.js` and `public/world.js`
+are deleted rather than fixed — the surest way not to regress into a renderer is
+not to have it.
 
-- **Seamlessness becomes checkable.** Today `world.js` joins platforms with a
-  bespoke `run()` / `link()` pair and the joins are correct because they were
-  eyeballed. Under the socket contract two slices stitch iff their facing
-  sockets are open at the same height, so `check.mjs` asserts every seam in
-  every world instead of trusting a reading.
-- **Walkability stops being a parallel system.** `app.js` routes over
-  `edges[].walk` polylines that `world.js` emits alongside the geometry — two
-  representations that must be kept in step by hand. In the POC each slice puts
-  a nav node at each open socket, so the nav graph is connected *iff* the
-  geometry is stitched. It is the same fact, not a copy of it.
-- **Paths can cross.** Orthogonal routes that own their cells cannot always be
-  drawn in the plane; 13 of 200 random DAGs partition the grid and cannot be
-  laid out at all. The `crossing` slice fixes that, and one path passing over
-  another is the single most Monument Valley thing in the reference.
-- **Layout is routed, not placed.** The serpentine trail in `world.js` is a
-  fixed shape that the graph is poured into. The POC routes each edge with a
-  turn penalty, rip-up and retry, and barycentre lane ordering, so the world
-  takes the shape of the graph rather than the other way round.
+**The four defects, and why they cannot return.** Each was a consequence of the
+old code existing, so each died with it:
 
-### Bugs `public/` still has that `poc/` has fixed
+- *The avatar painted over by her own walkway.* `world.js` built a causeway leg
+  — every tread — as one group whose bounding box **contained** her, so no axis
+  separated them. Now: one group per tread, per corner arm, per crossing deck.
+- *`sortAvatar` satisfied half its constraint.* It inserted her after the last
+  group entirely behind her and ignored everything she must be drawn *before*.
+  The order is a topological sort of a **partial** order, so incomparable groups
+  are separated by an arbitrary tie-break and no single slot need satisfy both
+  ends. Now: she is sorted **into** the scene every frame.
+- *A scalar painter's key cannot order stacked solids.* One key cannot say "the
+  deck is above its own root" and "the deck is behind the column standing on it"
+  at once. Now: solids inside a group are ordered by the same exact topological
+  sort used between groups.
+- *A raised floor panel broke the platform's separation.* `faceT` lifted an
+  inlaid panel above its surface, which lifted the group's box past the deck top
+  — and that top is exactly what separates a platform from whoever stands on it.
+  Now: the panel sinks below its surface and still sorts above on the tie-break.
 
-These are latent in the shipped renderer today, found while fixing them in the
-POC:
+`assertOnStone` went too. It existed to catch the walk polylines disagreeing
+with the stone they claimed to follow; there is no second representation now, so
+the failure mode and its policeman are both gone.
 
-- **The avatar can be painted over by the walkway she is standing on.**
-  `world.js` builds a whole causeway leg — every stair tread included — as one
-  group. The depth sort separates two boxes only when one lies entirely on the
-  near side of the other along some axis, and a leg's box *contains* her, so no
-  axis separates them. `sortAvatar` in `app.js` then falls back to an
-  approximate placement. Fix: one group per tread, per corner arm, per crossing
-  deck.
-- **`sortAvatar` satisfies only half its constraint.** It walks the visible
-  order accumulating the last index of a group entirely behind her, and inserts
-  there. That ignores every group she must be drawn *before*. It is the safer
-  of the two one-sided choices — the POC picked the other half and she sank
-  through the floor — but it is unsound for the same reason: the draw order is
-  a topological sort of a *partial* order, so incomparable groups are separated
-  by an arbitrary tie-break and no single slot need satisfy both ends. Fix:
-  sort her into the scene each frame. It costs 0.3ms on the largest POC world,
-  two per cent of a frame, so the optimisation was never worth its risk.
-- **A single scalar painter's key cannot order stacked solids.** `sortShapes`
-  in `public/iso.js` sorts a group's shapes by their near corner. That cannot
-  express "the deck is above its own root" and "the deck is behind the column
-  standing on it" at once. In the POC a court's root painted a dark rhombus
-  across its own deck until solids inside a group were ordered by the same
-  exact topological sort used between groups.
-- **A raised floor decoration breaks the platform's separation.** `faceT` lifts
-  an inlaid panel a hair above its surface so it sorts on top. That lifts the
-  whole group's bounding box past the deck top — and the deck top is exactly
-  what separates a platform from whoever stands on it. Sink the panel below the
-  surface instead; being inset, it still sorts above on the tie-break.
+### The compactness question, and the two answers it gave
 
-### What `poc/` does not have yet
+The POC's stated limit was "worlds get wide", and the obvious fix was to fold
+the trail the way the old `world.js` did. Confirming that before adoption was
+worth the trouble, because it failed twice, in opposite directions.
 
-Adoption is a rebuild of `world.js` and the rendering half of `app.js`, not a
-drop-in. The POC deliberately omits everything the product needs around the
-world:
+The projection is rigid: a layer step of `(a,b)` cells carrying one `FLOOR` of
+climb lands at `dx = (a-b)*256`, `dy = (a+b)*128 - 128`. So `a+b = 1` gives an
+exactly level band and `a = b` an exactly vertical fold — a serpentine falls
+straight out of the arithmetic. But a level band costs `(+4,-3)` = 1792px per
+layer against the unfolded `(+4,0)`'s 1024px, because the old serpentine got
+level rows free (z was constant within a row) and the slice world must climb
+every layer. Searched exhaustively on a 16:9 viewport, the best fold bought
+9–14% on deep worlds, most of it from changing the layer direction rather than
+from folding at all. **Don't fold.**
 
-- lessons, the comprehension check, unlock state and progress colouring;
-- mist and the reveal of distant content, which is a real design idea in
-  `public/` and worth keeping;
-- asking at the fork — the junction logic in `app.js` that walks her out to
-  where onward paths diverge before asking which way;
-- the LLM graph endpoint and its validator, which are orthogonal and fine.
+That conclusion was true and useless, because it was a desktop conclusion.
+Monument Valley is a phone game and Ken Wong's constraint was that a level fits
+one screen — without it, he said, you cannot force great compositions. Re-scored
+against phone portrait the result inverts: unfolded scores an aspect penalty of
+1.27–2.14 octaves where the fold scores 0.00. Desktop (1.78) and phone (0.46)
+differ by 3.9x, and `log2(3.9) = 1.96` — precisely the gap. **No fixed layout
+serves both.**
 
-Worlds also come out **wider** in the POC: depth runs horizontally, so a
-nine-deep curriculum is a long band rather than a single-screen composition.
-`public/`'s serpentine folds the trail back on itself to stay compact. Some
-version of that fold should be recovered — probably as a routing constraint
-rather than a fixed layout.
+Nor does the mist rescue it, which was the other tempting escape. The summit is
+deliberately always revealed, so the revealed bounding box spans the whole world
+from the first step to the last: measured over full playthroughs of all six
+authored graphs, the revealed area never drops below 96% of the total. Mist
+hides detail, not extent.
 
-### Suggested order
+So layers-per-band became a **viewport parameter**, scored in `world/compose.js`
+against the real screen. Folding still is not free — a band change is a long
+route, and on `deep` it took the world from 28 straights to 68 and forced the
+traveller to 1.6 units a frame — so a fold must win by a quarter of an octave
+before it is taken. Full reasoning:
+[docs/plans/2026-09-08-slice-world-adoption-design.md](docs/plans/2026-09-08-slice-world-adoption-design.md).
 
-1. Port `poc/iso.js` over `public/iso.js` — the per-solid topological sort,
-   interior-face suppression and the `faceT` fix are strict improvements and
-   are independent of the slice system.
-2. Fix `sortAvatar` to sort her into the scene, and split causeway legs per
-   tread. That removes the visible defects without touching layout.
-3. Replace `world.js` with the slice pipeline, keeping `app.js`'s reveal,
-   unlock and fork behaviour on top of the new nav graph.
-4. Recover compactness — fold the routed layout so a long curriculum still
-   reads on one screen.
+### What this cost, and what is still owed
+
+- Worlds on portrait screens carry 1.1–1.5x the polygons, and noticeably more
+  walkway, because a fold's band change is a long route.
+- The layout is chosen once, at build time. Rotating a phone re-fits the camera
+  but does not re-compose the world: rebuilding mid-journey would invalidate the
+  nav node the traveller is standing on.
+- `poc/` survives as the whitebox lab. It is not dead code — it is how you debug
+  geometry with the curriculum and the art out of the way.
 
 ---
 
 ## 6. Immediate next steps (ranked)
 
-1. **Rebuild `public/` on the slice system** (section 5). It supersedes items 2
-   and 3 of the old list: switchbacks become a routing constraint, and the
-   crossing slice already does what the bypass logic was reaching for.
-2. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
+1. **Have someone read a generated lesson.** Everything else here is structure,
+   and structure is now well asserted. Nothing has verified that what a platform
+   teaches is *true*, or that walking one teaches anything. No further assertion
+   will answer it.
+2. **Decide whether `MIN_KCS` should scale with the breadth of the goal.** The
+   negotiation now makes goals narrower, a narrow goal decomposes into fewer
+   atoms, and the floor of six then rejects the syllabus as too thin — twice —
+   so it falls back to demo content. Seen on two of three live topics. The floor
+   earns its keep against weak models; the interaction with a well-scoped goal
+   is new and unhandled.
+3. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
    possible; a bridge that swings to connect two decks when you tap it. Easier
    under the socket contract than before: a pivot is a slice whose socket moves
    from one side to another, and the seam check says whether it has landed.

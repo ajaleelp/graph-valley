@@ -1,19 +1,19 @@
 # Graph Valley
 
-> **Work in progress.** Two halves, at different stages.
+> **Work in progress**, but now one product rather than two halves.
 >
-> **The world** is real and playable, and mid-replacement: `poc/` is a proven,
-> independently verified rebuild of it as four reusable slice templates stitched
-> by a socket contract, and `public/` should be rebuilt on it. See
-> [poc/README.md](poc/README.md) and section 5 of [CHALLENGES.md](CHALLENGES.md).
+> **The world** is built by one engine, in `world/`, shared by the product, the
+> whitebox lab in `poc/`, and the 3154 assertions that check it. `public/` was
+> rebuilt on it and its own renderer deleted, along with the four defects
+> [CHALLENGES.md](CHALLENGES.md) section 5 documented.
 >
-> **The curriculum** is rebuilt on standard instructional design and **works end
-> to end against a real model**: a topic becomes a negotiated goal, a set of
-> knowledge components, a validated platform graph, and a lesson written from
-> those components — every stage verified headlessly, and the whole path checked
-> over HTTP. The committed fixtures are recorded `gpt-4o` output. What it
-> produces has still never been *read* by a learner.
-> See [What isn't built yet](#what-isnt-built-yet).
+> **The curriculum** runs end to end in the product: a topic is negotiated into
+> a concrete goal, decomposed into knowledge components, packed into a validated
+> platform graph, and taught from those components — with every question the
+> syllabus holds now reaching the learner.
+>
+> What it produces has still never been *read* by a learner, and syllabus
+> quality still varies run to run. See [What isn't built yet](#what-isnt-built-yet).
 
 **Type a goal. Walk the path. Reach the summit.**
 
@@ -89,7 +89,8 @@ to *implement a supervised learning algorithm from scratch* in three turns,
 `poc/build.js` — 18 slices, 4 courts, no seam problems.
 
 ```
-node curriculum/check.mjs      # or: npm run check
+node curriculum/check.mjs             # or: npm run check   — the syllabus pipeline
+node world/check.mjs                  # or: npm run world   — the world engine
 node --test 'curriculum/*.test.mjs'   # or: npm test
 ```
 
@@ -116,24 +117,37 @@ that's a quality signal no single assertion catches.
 
 ## What does work
 
-- **A true isometric engine** (`public/iso.js`) — everything sits on an integer
+- **A true isometric engine** (`world/iso.js`) — everything sits on an integer
   3D grid projected 2:1, so a cell is a real cube. Flat three-tone shading, one
   light source, no outlines. Occlusion is a topological sort over bounding boxes
   rather than an approximate depth key, so nothing ever paints over what stands
-  in front of it — the traveller included.
-- **A serpentine trail** (`public/world.js`) — platforms run left to right along
-  a row, up a flight of stairs, then back the other way. It falls out of the
-  projection: the within-row step's vertical components cancel exactly, and the
-  row change's horizontal ones do, so rows come out level and stack up the
-  screen.
+  in front of it — the traveller included, every frame.
+- **A world stitched from four templates** (`world/slices.js`) — court,
+  straight, corner, crossing, joined by a socket contract: two slices stitch iff
+  their facing sockets are open at the same height. Seamlessness is an assertion,
+  not a reading, and a stair is a parameter rather than a template.
+- **Walkability is the same fact as the geometry** — each slice puts a nav node
+  at each open socket, so the nav graph is connected *iff* the world is stitched.
+  There is no second representation to keep in step.
+- **The world is composed for the screen it is on** (`world/compose.js`) —
+  layers-per-band is chosen by scoring candidate layouts against the actual
+  viewport. Desktop and phone portrait are two octaves apart in aspect and no
+  single layout serves both. See the
+  [design note](docs/plans/2026-09-08-slice-world-adoption-design.md).
 - **She actually walks it** — along stone that is really drawn, stairs included,
-  never diagonally through open sky. The camera follows her.
+  never diagonally through open sky. Every walkable surface is a destination,
+  not just the platforms. The camera follows her.
 - **Mist** — nothing past the next platform is drawn; the next one is a ghost;
   the summit stays a ghost on the horizon.
 - **Forks asked at the fork** — she walks out to the junction before asking.
 - **Six chapter palettes**, chosen deterministically from your topic.
-- **A curriculum that can be argued with** — 70 unit tests, 31 end-to-end
-  assertions over five recorded topics, all headless.
+- **A negotiated goal** — the intake asks up to three scoping questions before
+  anything is built. "machine learning" became *implement and explain a
+  supervised learning algorithm from scratch in Python* in two.
+- **Every question the syllabus holds** — a platform teaching three things is
+  examined on all three, asked one at a time.
+- **A curriculum that can be argued with** — 76 unit tests, 31 end-to-end
+  assertions over five recorded topics, 3154 world assertions, all headless.
 - **Zero npm dependencies** — one Node file, vanilla JS frontend, `node:test`.
 
 ---
@@ -144,7 +158,8 @@ that's a quality signal no single assertion catches.
 topic in five: asked for 6–16 atoms it returns four, asked for concrete cluster
 titles it returns "Economic Factors, Political Factors, Ideological Factors",
 asked to vary Bloom levels it flattens everything to "understand". `gpt-4o`
-passes all five. Set `OPENAI_MODEL=gpt-4o` — the default is not good enough.
+passes all five, and is now the default — a default documented as not good
+enough is just a bug with a footnote.
 
 **Runs vary a lot.** Two `gpt-4o` runs over the same five topics with the same
 prompts scored 4/5 and 2/5 before the last round of fixes, and 5/5 after. Treat
@@ -167,16 +182,23 @@ learner state at all beyond `localStorage`.
 Nothing brings an atom back later, which is the mechanism most likely to make
 any of it stick.
 
-**No intake UI.** `POST /api/negotiate` exists and works; nothing calls it. The
-front end still posts a bare topic, and the server takes it at face value —
-which skips backward design's first stage, the one that does the most work.
+**A narrow goal can fall under the atom floor.** This is new, and it is a
+direct consequence of wiring the negotiation in: a well-scoped goal decomposes
+into fewer atoms, and `MIN_KCS = 6` then rejects the syllabus as too thin —
+twice — so it falls back to demo content. Seen on two of three live topics. The
+floor exists for a good reason (weak models return three against a prompt
+asking for six to sixteen), so whether it should scale with the breadth of the
+goal is a curriculum-design decision, not a rendering one.
 
 **Nothing is grounded.** No sources, no citations. A confident wrong statement
 passes every assertion here.
 
-**One check per platform reaches the renderer.** The syllabus holds one question
-per atom; `public/` reads one per platform, so the rest are carried but unused
-until the renderer catches up.
+**The layout is chosen once, at build time.** Rotating a phone re-fits the
+camera but does not re-compose the world — rebuilding mid-journey would
+invalidate the nav node the traveller is standing on.
+
+**A resumed journey on a cold server** falls back to a generic lesson: the
+syllabus lives in server memory and `localStorage` carries only the goal.
 
 There is also no account system and no persistence beyond `localStorage`.
 
@@ -226,21 +248,25 @@ are cached in memory, so repeated lookups don't re-bill.
 | Endpoint | Request | Response |
 |---|---|---|
 | `POST /api/negotiate` | `{ topic, turns[] }` | `{ done: false, ask }` — or `{ done: true, goal, capstone, spine, priors }` |
-| `POST /api/syllabus` | `{ topic, goal?, capstone? }` | `{ topic, syllabus, source }` — atoms, platforms, derived edges, checks |
+| `POST /api/syllabus` | `{ topic, goal?, capstone?, spine? }` | `{ topic, syllabus, graph, source }` — the document *and* the projection, in one round trip |
 | `POST /api/graph` | `{ topic }` | `{ topic, graph, source }` — the syllabus **projected** to the old shape |
-| `POST /api/node` | `{ topic, title, summary }` | `{ lesson, source }` |
+| `POST /api/node` | `{ topic, id, title, summary, goal }` | `{ lesson, source }` — `lesson.checks` holds every question the platform has |
 
 `/api/graph` still returns `{ id, title, summary, deps[], goal }` exactly as
-before, so **`public/` and `poc/` both consume it unchanged** — the curriculum
-work and the renderer rebuild stay independent. `source` is `"llm"` |
-`"llm-retry"` | `"fallback"` | `"cache"`.
+before, and `world/build.js` consumes that shape unchanged — so a raw DAG works
+as well as a syllabus, which is what lets `poc/` exercise the engine on authored
+test graphs. `source` is `"llm"` | `"llm-retry"` | `"fallback"` | `"cache"`.
 
-`/api/node` takes the same request as before, but the server now finds that
-platform in the syllabus it already holds and writes the lesson from its atoms:
+A syllabus is identified by its topic **and** the goal that was negotiated, not
+the topic alone: one topic can be scoped into several different courses, and
+`/api/node` has to write the lesson from the one you are actually walking.
+
+`/api/node` names the platform by id, and the server finds it in the syllabus it
+already holds and writes the lesson from that platform's atoms:
 what to teach, what to pull back out of memory first, which misconceptions to
-head off, and how much scaffolding to leave in place. The check it returns comes
-from the syllabus rather than from a second LLM call, so its wrong answers are
-real misconceptions rather than invented ones.
+head off, and how much scaffolding to leave in place. The checks it returns — all of them, one per atom — come from the syllabus
+rather than from a second LLM call, so their wrong answers are real
+misconceptions rather than invented ones.
 
 ---
 
@@ -259,16 +285,25 @@ real misconceptions rather than invented ones.
 │   ├── llm.mjs           #   Anthropic / OpenAI plumbing
 │   ├── check.mjs         #   headless end-to-end verification + shape report
 │   └── fixtures/         #   recorded model responses; --live re-records
+├── world/                # the world engine — shared by the product and the lab
+│   ├── iso.js            #   projection, solids, exact depth sort
+│   ├── slices.js         #   the four templates and the socket contract
+│   ├── layout.js         #   graph -> coarse grid: lanes, routing, rip-up and retry
+│   ├── compose.js        #   how the world folds, chosen from the viewport
+│   ├── nav.js            #   the walkable graph, derived from the sockets
+│   ├── build.js          #   assemble: layout -> slices -> geometry + nav
+│   ├── walk.js           #   following a path, and the traveller's own box
+│   └── check.mjs         #   3154 headless assertions over the whole engine
+├── poc/                  # whitebox viewer for the engine: no curriculum, no art
 └── public/
-    ├── index.html        # screens: home, loading, world, lesson sheet, fork, summit
+    ├── index.html        # screens: home, intake, loading, world, lesson, fork, summit
     ├── style.css         # flat palette as CSS vars, per-state overrides, sky, HUD
-    ├── iso.js            # isometric engine: projection, solids, stairs, depth sort
-    ├── world.js          # the serpentine trail, platform features, path builder
-    └── app.js            # rendering, camera, the walk, mist, labels, save/resume
+    └── app.js            # rendering, camera, the walk, mist, labels, intake, save
 ```
 
-`iso.js` and `world.js` are pure — no DOM, no browser globals — so they import
-straight into Node for geometry work. Everything in `curriculum/` is likewise
+Everything in `world/` is pure — no DOM, no browser globals — so it imports
+straight into Node, which is how `check.mjs` asserts the shipped renderer
+without a browser. Everything in `curriculum/` is likewise
 importable and testable on its own; the two LLM stages take the model as an
 argument, so nothing there needs a network to be tested.
 
