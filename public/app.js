@@ -190,6 +190,7 @@ function renderWorld() {
   lamp.remove();
   host.textContent = '';
 
+  for (const b of BANDS) bandEl(b);           // in order: far, near, clear
   const frag = document.createDocumentFragment();
   S.elFor = new Map();
   for (const g of S.world.groups) {
@@ -209,8 +210,8 @@ function renderWorld() {
     S.elFor.set(g, node);
     frag.appendChild(node);
   }
-  host.appendChild(frag);
-  host.appendChild(av);
+  bandEl('clear').appendChild(frag);
+  bandEl('clear').appendChild(av);
   host.appendChild(lamp);
 
   renderLabels();   // must exist before paintStatus fills in their names
@@ -236,8 +237,24 @@ function renderWorld() {
  */
 const BANDS = ['far', 'near', 'clear'];
 
+/* Each band is its own <g>, so the haze that makes distance read as distance is
+ * one filter on one element rather than one per platform. It also keeps the
+ * bands in order — unrevealed stone behind everything revealed — which matters
+ * because in this projection later layers sit NEARER the camera, and left in
+ * true depth order the ghosts would fall in front of what you can actually see.
+ */
+function bandEl(name) {
+  let el = $(`#band-${name}`);
+  if (!el) {
+    el = document.createElementNS(SVGNS, 'g');
+    el.id = `band-${name}`;
+    el.setAttribute('class', `band band-${name}`);
+    $('#world-structure').appendChild(el);
+  }
+  return el;
+}
+
 function reorder() {
-  const host = $('#world-structure');
   const her = S.her;
   const ordered = her ? orderWith(S.world.groups, her) : depthSort(S.world.groups);
 
@@ -247,8 +264,9 @@ function reorder() {
   // Reconcile against the order rather than rebuilding the DOM. The world's
   // groups keep their relative places between frames, so the common case moves
   // exactly one element even though every one is checked.
-  let node = host.firstChild;
   for (const band of BANDS) {
+    const host = bandEl(band);
+    let node = host.firstChild;
     for (const g of bands[band]) {
       const wanted = g === her ? $('#avatar') : S.elFor.get(g);
       if (!wanted) continue;
@@ -256,7 +274,7 @@ function reorder() {
       host.insertBefore(wanted, node);
     }
   }
-  host.appendChild($('#avatar-lamp'));
+  $('#world-structure').appendChild($('#avatar-lamp'));
 }
 
 const VEIL_RANK = { far: 0, near: 1, clear: 2 };

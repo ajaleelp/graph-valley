@@ -13,8 +13,13 @@ import { validate } from './validate.mjs';
 
 const DEFAULT_BUDGET = 3;
 
-/** Fewer than this is a definition list, not a course. Matches the prompt. */
+/* A course is not a definition list, so it has a floor. But that floor belongs
+ * to the COURSE, not to each of its modules: a module that teaches four atoms
+ * well is a module, and rejecting it for being small is what drove every
+ * well-scoped narrow goal into the fallback. `buildSyllabus` takes the floor as
+ * an argument for that reason — the module builder passes MIN_MODULE_KCS. */
 export const MIN_KCS = 6;
+export const MIN_MODULE_KCS = 3;
 
 /* The topic arrives capitalised from cleanTopic, and reads badly mid-sentence
  * ("Explain how How black holes work works"). One place decides the phrasing,
@@ -48,7 +53,7 @@ export function defaultCapstoneFor(topic) {
   };
 }
 
-export async function buildSyllabus({ topic, goal, capstone, spine = 'concept', llm, budget = DEFAULT_BUDGET, known = new Set() }) {
+export async function buildSyllabus({ topic, goal, capstone, spine = 'concept', llm, budget = DEFAULT_BUDGET, known = new Set(), minKcs = MIN_KCS }) {
   const attempts = [];
 
   if (llm) {
@@ -69,7 +74,7 @@ export async function buildSyllabus({ topic, goal, capstone, spine = 'concept', 
       }
 
       if (spec) {
-        const doc = assemble(spec, { budget, known });
+        const doc = assemble(spec, { budget, known, minKcs });
         const result = validate(doc);
         if (result.ok) {
           return { doc, source: attempts.length ? 'llm-retry' : 'llm', errors: [] };
@@ -82,18 +87,18 @@ export async function buildSyllabus({ topic, goal, capstone, spine = 'concept', 
   }
 
   const spec = fallbackSpec(topic, { goal, capstone, spine });
-  const doc = assemble(spec, { budget, known });
+  const doc = assemble(spec, { budget, known, minKcs });
   return { doc, source: 'fallback', errors: attempts.flatMap((a) => a.errors) };
 }
 
 /** Pack a spec and fold the result into one document. */
-export function assemble(spec, { budget = DEFAULT_BUDGET, known = new Set() } = {}) {
+export function assemble(spec, { budget = DEFAULT_BUDGET, known = new Set(), minKcs = MIN_KCS } = {}) {
   const { nodes, edges, problems } = pack(spec, { budget, known, spine: spec.spine });
   return {
     topic: spec.topic,
     spine: spec.spine,
     budget: { newKcs: budget },
-    minKcs: MIN_KCS,
+    minKcs,
     goal: spec.goal,
     capstone: spec.capstone,
     assumed: spec.assumed || [],

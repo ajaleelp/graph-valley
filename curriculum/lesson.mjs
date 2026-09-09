@@ -123,3 +123,62 @@ function readCheck(c) {
   if (!usable) return null;
   return { question: c.question, options, answerIndex, explanation: String(c.explanation || '') };
 }
+
+
+/* --------------------------- the practice stage --------------------------
+ * Faded practice, which is what `scaffold` has been asking for since the
+ * schema was written and never once produced. The worked example is behind
+ * her; this is the same idea with the middle taken out.
+ *
+ * Renkl and Sweller's completion effect: a problem with some steps given and
+ * the rest left open teaches more per minute than either a worked example she
+ * only reads or a blank problem she cannot start. */
+export function practicePrompt(doc, node, { atoms = [] } = {}) {
+  const byKc = new Map((doc?.kcs || []).map((k) => [k.id, k]));
+  const label = (id) => byKc.get(id)?.label || id;
+  const scaffold = node?.segments?.find((s) => s.kind === 'apply')?.scaffold || 'partial';
+  const support = {
+    full: 'give every step but the last, and let her supply only that',
+    partial: 'give the setup and the first step or two; leave the rest',
+    none: 'give the situation only; she works it unaided',
+  }[scaffold] || 'give the setup and the first step or two; leave the rest';
+
+  return `Course: "${doc?.topic || ''}". She has just worked through an example of:
+${(atoms.length ? atoms : node?.teaches || []).map((id) => `- ${label(id)}`).join('\n')}
+
+Now set her ONE problem on exactly those, and ${support}.
+
+{"content": ["the situation, in one short paragraph",
+             "the steps you are giving her, as a short worked opening",
+             "what is left for her to finish, stated as a question"]}
+
+Rules:
+- Exactly 3 short paragraphs, at most 50 words each.
+- Concrete: real numbers, a real case. Not "consider a scenario".
+- Do NOT give the answer to the part you are leaving her.
+- No quiz, no options — the check comes afterwards.`;
+}
+
+/* Recall and prove need no model call at all. Recall is a doorway: name what
+ * she is about to need and ask her for it. Prove is the examination itself,
+ * and inventing prose to wrap it would only pad the moment. */
+export function stageLesson(stage, { atoms = [], labels = new Map(), goal } = {}) {
+  const name = (id) => labels.get(id) || id;
+  if (stage === 'recall') {
+    return {
+      content: [
+        'Before anything new — pull these back out of memory. You have met them already; retrieving them now is what keeps them.',
+        atoms.map(name).join(' · '),
+      ],
+    };
+  }
+  if (stage === 'prove') {
+    return {
+      content: [
+        goal ? `Show you can: ${goal}` : 'Everything this place taught, without the notes.',
+        'No worked example this time, and nothing to read first. If one of these will not come, you will be walked back to the platform that drilled it.',
+      ],
+    };
+  }
+  return null;
+}

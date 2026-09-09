@@ -275,8 +275,36 @@ button { font: inherit; color: inherit; }
 /* The mist. The world is not handed over all at once — it surfaces as you
    walk into it, and closes again beyond the next monument. */
 .grp { transition: opacity 1.1s ease; }
-.grp[data-veil="near"] { opacity: 0.34; }
-.grp[data-veil="far"] { opacity: 0; pointer-events: none; }
+/* Mist.
+ *
+ * This used to be two lines — opacity 0.34 and opacity 0 — which is not mist,
+ * it is fading, and the far band was simply invisible. Distance now reads as
+ * distance: the further bands are blurred, drained of colour, and thin enough
+ * that the sky comes through and tints them. You can see there is something out
+ * there without being able to say what, which is the whole point of the reveal.
+ *
+ * The haze is one filter per BAND, not per platform — see reorder() — so this
+ * costs three composited layers however large the world gets. */
+.band { transition: opacity 1.1s ease, filter 1.1s ease; }
+
+.band-near {
+  opacity: 0.5;
+  filter: blur(1.1px) saturate(0.55);
+}
+.band-far {
+  opacity: 0.16;
+  filter: blur(3.5px) saturate(0.12);
+  pointer-events: none;
+}
+.band-far .mlabel, .band-near .mlabel { display: none; }
+
+/* The old per-group rules are kept only for the veil that is still set on each
+   group: they no longer carry the effect, and near/far must not double up. */
+.grp[data-veil="far"] { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .band { transition: none; }
+}
 #avatar { pointer-events: none; }
 
 .monument { cursor: pointer; outline: none; }

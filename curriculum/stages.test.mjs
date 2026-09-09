@@ -132,3 +132,35 @@ test('a module of one group is a straight climb, not a fork', () => {
   const s = toStages(d);
   assert.deepEqual(s.map((x) => x.stage), ['recall', 'study', 'practice', 'prove']);
 });
+
+test('pairs are laid out in rows, so a level forks two ways and not five', () => {
+  const d = doc();
+  d.kcs = Array.from({ length: 6 }, (_, i) => ({ ...kc(`k${i}`), check: check(`k${i}`, 'understand') }));
+  d.nodes = Array.from({ length: 5 }, (_, i) =>
+    node(`n${i + 1}`, { teaches: [`k${i + 1}`], requires: i === 0 ? ['k0'] : [] }));
+  const s = toStages(d);
+  const g = stagesToGraph(s, 't');
+
+  assert.equal(g.nodes.filter((n) => !n.deps.length).length, 1, 'one way in, not five');
+  const widest = Math.max(...g.nodes.map((n) => g.nodes.filter((m) => m.deps.join() === n.deps.join()).length));
+  assert.ok(widest <= 2, `fan-out ${widest} is a menu, not a choice`);
+});
+
+test('every stage stays reachable however many pairs there are', () => {
+  for (const count of [1, 2, 3, 5, 7]) {
+    const d = doc();
+    d.kcs = Array.from({ length: count + 1 }, (_, i) => ({ ...kc(`k${i}`), check: check(`k${i}`, 'understand') }));
+    d.nodes = Array.from({ length: count }, (_, i) =>
+      node(`n${i + 1}`, { teaches: [`k${i + 1}`], requires: i === 0 ? ['k0'] : [] }));
+    const g = stagesToGraph(toStages(d), 't');
+    const seen = new Set(g.nodes.filter((n) => !n.deps.length).map((n) => n.id));
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const n of g.nodes) {
+        if (!seen.has(n.id) && n.deps.every((d2) => seen.has(d2))) { seen.add(n.id); grew = true; }
+      }
+    }
+    assert.equal(seen.size, g.nodes.length, `${count} pairs: ${g.nodes.length - seen.size} stranded`);
+  }
+});

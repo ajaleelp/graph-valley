@@ -21,9 +21,11 @@
  *
  * Two consequences worth stating.
  *
- * Where a module has more than three atoms it has several study/practice pairs,
- * and those pairs do not depend on each other — so the level forks, and joins
- * again at prove. A fork the learner can feel, inside a single sitting.
+ * Where a module has several study/practice pairs they are laid out in rows of
+ * at most two, each row waiting on the one below. So the level forks — a real
+ * choice of which to take first — without fanning into five parallel columns
+ * that read as five separate beginnings rather than one climb. Two is a choice;
+ * five is a menu.
  *
  * And failure has somewhere to go. Getting a prove check wrong does not mean
  * guessing again; it means walking back DOWN to the practice platform that
@@ -35,6 +37,11 @@ const LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'creat
 const rank = (l) => Math.max(0, LEVELS.indexOf(l));
 
 export const STAGES = ['recall', 'study', 'practice', 'prove'];
+
+/* How many study/practice pairs may sit side by side. Two is a choice you can
+ * see from where you are standing; five is a menu, and it makes a level read as
+ * several unconnected beginnings rather than one climb. */
+export const FORK_WIDTH = 2;
 
 /* A stage platform is still a platform: the renderer, the nav graph and the
  * unlock rules all read the same {id, title, summary, deps, goal} it always
@@ -74,12 +81,15 @@ export function toStages(doc) {
     entry = ['s-recall'];
   }
 
-  // 2 & 3. Study then practice, one pair per group of atoms. The pairs are
-  //        independent of each other, so the level forks here.
+  // 2 & 3. Study then practice, one pair per group of atoms, in rows of at
+  //        most FORK_WIDTH. Within a row the pairs are independent — that is
+  //        the fork; each row waits on the row below it — that is the climb.
   const pairEnds = [];
-  groups.forEach((n, i) => {
-    const teaches = n.teaches || [];
-    if (!teaches.length) return;
+  let row = [];
+  let below = entry;
+  const usable = groups.filter((n) => (n.teaches || []).length);
+  usable.forEach((n, i) => {
+    const teaches = n.teaches;
     const lvl = LEVELS[Math.max(...teaches.map((k) => rank(byKc.get(k)?.level)))] || 'understand';
     const studyId = `s-study-${i + 1}`;
     const practiceId = `s-practice-${i + 1}`;
@@ -96,7 +106,7 @@ export function toStages(doc) {
       // Studying is not where she is examined. One check, to catch a
       // misreading before she is asked to use it.
       checks: (n.checks || []).slice(0, 1),
-      deps: entry,
+      deps: below,
     });
 
     out.push({
@@ -113,7 +123,14 @@ export function toStages(doc) {
       checks: n.checks || [],
       deps: [studyId],
     });
-    pairEnds.push(practiceId);
+    row.push(practiceId);
+    // Close the row: the next pair starts from what this row finished.
+    if (row.length === FORK_WIDTH || i === usable.length - 1) {
+      below = row;
+      pairEnds.length = 0;
+      pairEnds.push(...row);
+      row = [];
+    }
   });
 
   // 4. Prove. Cold retrieval across the whole module, after the last practice —
