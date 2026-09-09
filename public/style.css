@@ -288,12 +288,17 @@ button { font: inherit; color: inherit; }
 .band { transition: opacity 1.1s ease, filter 1.1s ease; }
 
 .band-near {
-  opacity: 0.5;
-  filter: blur(1.1px) saturate(0.55);
+  /* Near mist is the NEXT place — you should be able to read its shape and
+     decide to walk to it. Too much haze here and a level reads as fog rather
+     than as a climb with something waiting at the top of it. */
+  opacity: 0.62;
+  filter: blur(0.7px) saturate(0.72);
 }
 .band-far {
-  opacity: 0.16;
-  filter: blur(3.5px) saturate(0.12);
+  /* Far mist is genuinely undecided ground — beyond it the next module has not
+     been generated yet. A suggestion of stone, and no more. */
+  opacity: 0.13;
+  filter: blur(4px) saturate(0.1);
   pointer-events: none;
 }
 .band-far .mlabel, .band-near .mlabel { display: none; }

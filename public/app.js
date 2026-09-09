@@ -1401,5 +1401,6 @@ window.gv = {
   S,
   get at() { return avatarPos; },
   walkTo, onNodeClick, onPathClick, routeTo, fitView, focusOn,
+  ascend, climbTo, nextModules, enterModule,
   compose: () => S.world?.graph.compose,
 };
