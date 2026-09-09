@@ -132,7 +132,9 @@ function toRendererCheck(c) {
     question: c.stem,
     options: c.options,
     answerIndex: c.answerIndex,
-    explanation: c.explanation || `This tests one idea: ${c.kc}.`,
+    // Never leak an internal atom id at a learner. When the syllabus gives no
+    // explanation, say what the question was about, not which row it came from.
+    explanation: c.explanation || '',
   };
 }
 

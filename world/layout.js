@@ -86,8 +86,15 @@ export function transitiveReduction(nodes) {
  * Nothing about the contract changes. A socket is still identified by (cell,
  * side), and the stitcher never learns how big the slice behind it is. */
 export function assignSpans(nodes) {
-  for (const n of nodes) n.span = 2;
-  return 2;
+  // Size says how much is taught here. A platform introducing three atoms is
+  // visibly a bigger place than one introducing a single idea — which is the
+  // cognitive-load budget made legible rather than merely obeyed.
+  let max = 2;
+  for (const n of nodes) {
+    n.span = (n.atoms || 0) >= 3 ? 3 : 2;
+    if (n.span > max) max = n.span;
+  }
+  return max;
 }
 
 /* Order the nodes within each layer.

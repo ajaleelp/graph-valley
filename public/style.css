@@ -592,3 +592,106 @@ button { font: inherit; color: inherit; }
   .mlabel { max-width: 150px; }
   #sheet { padding: 24px 20px 34px; }
 }
+
+/* ============================ THE ASCENT ==============================
+   The capstone floats above the clouds in SCREEN space: it never enters the
+   world's bounding box, so the mist is free to shrink the view to whatever is
+   actually near her. It is what she is climbing towards, visible the whole
+   way, and it does not move when she pans. */
+#capstone {
+  position: absolute; top: 146px; left: 50%; transform: translateX(-50%);
+  z-index: 6; pointer-events: none; text-align: center; width: min(420px, 86vw);
+}
+#capstone.hidden { display: none; }
+
+#capstone-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 16px; padding: 12px 18px 13px;
+  box-shadow: 0 18px 44px -26px rgba(90, 70, 80, 0.7);
+  backdrop-filter: blur(5px);
+}
+#capstone-kicker {
+  font-size: 0.62rem; letter-spacing: 0.16em; font-weight: 700;
+  color: rgba(110, 90, 100, 0.65);
+}
+#capstone-goal {
+  margin: 5px 0 9px; font-size: 0.95rem; line-height: 1.32;
+  font-weight: 600; color: #55404a;
+}
+#capstone-bar {
+  height: 4px; border-radius: 2px; background: rgba(120, 95, 105, 0.16); overflow: hidden;
+}
+#capstone-fill {
+  display: block; height: 100%; width: 0%; border-radius: 2px;
+  background: var(--gold, #f0c86a); transition: width 0.9s ease;
+}
+#capstone-count {
+  display: block; margin-top: 6px; font-size: 0.7rem; color: rgba(110, 90, 100, 0.65);
+}
+
+/* Cloud beneath it, so it reads as being up there rather than pinned to the
+   top of a rectangle. */
+#capstone-cloud { position: relative; height: 26px; }
+#capstone-cloud i {
+  position: absolute; display: block; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75); filter: blur(7px);
+}
+#capstone-cloud i:nth-child(1) { width: 190px; height: 22px; left: 8%;  top: 12px; }
+#capstone-cloud i:nth-child(2) { width: 130px; height: 18px; right: 4%; top: 16px; }
+#capstone-cloud i:nth-child(3) { width: 240px; height: 16px; left: 22%; top: 22px; }
+
+/* What she has climbed past, gathering at the bottom of the screen. */
+#cloudbank { position: absolute; inset: auto 0 0 0; height: 34vh; z-index: 3; pointer-events: none; }
+#cloudbank i {
+  position: absolute; display: block; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5); filter: blur(20px);
+}
+#cloudbank i:nth-child(1) { width: 52vw; height: 74px; left: -6vw;  bottom: 2vh; }
+#cloudbank i:nth-child(2) { width: 44vw; height: 60px; right: -4vw; bottom: 8vh; }
+#cloudbank i:nth-child(3) { width: 66vw; height: 52px; left: 14vw;  bottom: -2vh; }
+#cloudbank i:nth-child(4) { width: 30vw; height: 44px; right: 18vw; bottom: 15vh; opacity: 0.6; }
+
+/* The moment a module opens. Brief, and it does not ask for a click. */
+#ascend {
+  position: absolute; inset: 0; z-index: 22; display: grid; place-items: center;
+  pointer-events: none; background: rgba(255, 252, 246, 0.34); backdrop-filter: blur(2px);
+}
+#ascend.hidden { display: none; }
+#ascend-card {
+  text-align: center; padding: 22px 30px; border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 26px 60px -30px rgba(90, 70, 80, 0.75);
+  animation: rise 0.7s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+#ascend-kicker {
+  font-size: 0.62rem; letter-spacing: 0.18em; font-weight: 700; color: var(--accent, #c98a4b);
+}
+#ascend-title { margin: 7px 0 3px; font-size: 1.3rem; font-weight: 620; color: #55404a; }
+#ascend-sub { margin: 0; font-size: 0.9rem; color: #86636c; }
+@keyframes rise { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Climbing to the next level: the old one sinks away, the new one rises. */
+#viewport.ascending { transition: transform 0.85s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.85s ease; }
+#viewport.sinking { transform: translateY(-110px); opacity: 0; }
+#viewport.arriving { transform: translateY(110px); opacity: 0; }
+
+#hud-module {
+  font-size: 0.66rem; color: rgba(110, 90, 100, 0.66); margin-top: 2px;
+  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (max-width: 700px) {
+  #capstone { top: 132px; width: min(340px, 92vw); }
+  #capstone-goal { font-size: 0.85rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ascend-card { animation: none; }
+  #viewport.ascending { transition: none; }
+}
+
+/* Each step of the loop reads differently at a glance — the label tells you
+   what kind of place you are looking at before you walk to it. */
+.mlabel[data-stage="prove"] .mlabel-step { color: var(--accent, #c98a4b); font-weight: 700; }
+.mlabel[data-stage="practice"] .mlabel-step { font-style: italic; }
+.mlabel[data-stage="recall"] .mlabel-step { opacity: 0.7; }
+.choice-opt small { display: block; margin-top: 3px; font-size: 0.78em; opacity: 0.62; font-weight: 400; }

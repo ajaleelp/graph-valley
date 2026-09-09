@@ -11,6 +11,30 @@ import { navGraph, addNode, addEdge, navKey } from './nav.js';
 
 const FEATURES = ['pillars', 'blocks', 'obelisk', 'drum'];
 
+/* Form follows content.
+ *
+ * Architecture used to be dealt FEATURES[i % 4] — round-robin by array index,
+ * carrying no information at all, which is exactly why the world read as the
+ * same four blocks over and over. Every platform now looks like what it is:
+ *
+ *   recall    a gate      — a doorway you pass through to begin
+ *   study     pillars     — where something is set out for you
+ *   practice  blocks/drum — a workbench, lower and plainer
+ *   prove     the summit  — the top of the level, and the only tall thing
+ *
+ * Height carries the Bloom level, so a platform that asks you to CREATE
+ * genuinely towers over one that asks you to REMEMBER, and size carries how
+ * many atoms it teaches. Nothing here is decoration: every varying thing is
+ * something the syllabus already knew and the renderer used to throw away. */
+const STAGE_FEATURE = {
+  recall: 'gate',
+  study: 'pillars',
+  practice: 'blocks',
+  prove: 'summit',
+};
+const BLOOM = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+const bloomRank = (l) => Math.max(0, BLOOM.indexOf(l));
+
 function hash(str) {
   let h = 2166136261;
   for (let i = 0; i < String(str).length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -62,10 +86,22 @@ export function build(graph, opts = {}) {
     const sides = open.get(n.id);
     const cap = n.span * 4;
     if (sides.length > cap) problems.push(`court ${n.id} needs ${sides.length} sockets; a ${n.span}x${n.span} court has ${cap}`);
-    n.feature = goalIds.has(n.id) ? 'summit' : n.depth === 0 ? 'gate' : featureOf.get(n.id);
+
+    // A stage says what this place is FOR, and that decides what stands on it.
+    // Without one — a raw DAG, or the authored test graphs — fall back to the
+    // old rotation, which is what those worlds were tuned against.
+    n.feature = n.stage ? (STAGE_FEATURE[n.stage] || 'pillars')
+      : goalIds.has(n.id) ? 'summit'
+      : n.depth === 0 ? 'gate'
+      : featureOf.get(n.id);
+
+    // Height from the level it asks for; a little jitter so a row of equals is
+    // not a row of identical twins.
+    const lvl = n.level ? 0.62 + bloomRank(n.level) * 0.16 : 1;
     slices.push(court({
       u: n.cell.u, v: n.cell.v, z: n.z, open: sides, span: n.span,
-      feature: n.feature, id: n.id, tall: 0.8 + ((h >>> 13) % 50) / 100,
+      feature: n.feature, id: n.id,
+      tall: lvl * (0.9 + ((h >>> 13) % 22) / 100),
     }));
   }
 

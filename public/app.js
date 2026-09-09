@@ -91,6 +91,8 @@ const dimTri = (tri) => tri.map((c) => dim(c));
 
 const S = {
   topic: null, title: null, graph: null, source: null,
+  // A journey is a course of modules; a module is a level she walks.
+  modules: [], doneModules: new Set(), current: null, level: null,
   done: new Set(), world: null, courts: [], nodeById: new Map(), elFor: new Map(), her: null,
   groupEls: [], visOrder: [], avIdx: -1,
   lessonCache: new Map(), currentNode: null, at: null, walking: false,
@@ -126,12 +128,10 @@ const showScreen = (id) => $$('.screen').forEach((s) => s.classList.toggle('acti
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      topic: S.topic, title: S.title, source: S.source, done: [...S.done],
+      topic: S.topic, title: S.title, source: S.source,
       goal: S.goal, capstone: S.capstone,
-      graph: {
-        title: S.graph.title,
-        nodes: S.graph.nodes.map((n) => ({ id: n.id, title: n.title, summary: n.summary, deps: n.deps, goal: n.goal })),
-      },
+      modules: S.modules, doneModules: [...S.doneModules],
+      current: S.current, done: [...S.done],
     }));
   } catch { /* private mode */ }
 }
@@ -199,6 +199,8 @@ function renderWorld() {
       node.setAttribute('data-node', g.id);
       node.setAttribute('tabindex', '0');
       node.setAttribute('role', 'button');
+      const st = S.stageById?.get(g.id)?.stage;
+      if (st) node.setAttribute('data-stage', st);
     } else if (g.navAt) {
       // Every walkable surface is a destination, not only the courts. This is
       // also what stops a bridge drawn in front of a platform from swallowing
@@ -334,7 +336,11 @@ function renderLabels() {
     b.className = 'mlabel';
     b.dataset.node = n.id;
     b.classList.toggle('is-goal', !!n.goal);
-    b.innerHTML = `<span class="mlabel-step">${n.goal ? 'Summit' : `Step ${n.depth + 1}`}</span>`
+    const st = S.stageById?.get(n.id)?.stage;
+    const kicker = { recall: 'Recall', study: 'Study', practice: 'Practice', prove: 'Prove' }[st]
+      || (n.goal ? 'Summit' : `Step ${n.depth + 1}`);
+    b.dataset.stage = st || '';
+    b.innerHTML = `<span class="mlabel-step">${kicker}</span>`
       + '<span class="mlabel-text"></span>';
     b.addEventListener('click', () => onNodeClick(n.id));
     host.appendChild(b);
@@ -704,7 +710,13 @@ function onNodeClick(id) {
 }
 
 function openSheet(n, st) {
-  $('#sheet-kicker').textContent = n.goal ? 'THE SUMMIT' : `STEP ${n.depth + 1}`;
+  const stage = S.stageById?.get(n.id)?.stage;
+  $('#sheet-kicker').textContent = {
+    recall: 'FIRST — WHAT YOU ALREADY HAVE',
+    study: 'WORKED EXAMPLE',
+    practice: 'YOUR TURN',
+    prove: 'PROVE IT — NO NOTES',
+  }[stage] || (n.goal ? 'THE SUMMIT' : `STEP ${n.depth + 1}`);
   $('#sheet-title').textContent = n.title;
   $('#sheet-summary').textContent = n.summary || '';
   $('#sheet-content').innerHTML =
@@ -722,7 +734,7 @@ function openSheet(n, st) {
     });
     $('#sheet-content').innerHTML = lesson.content.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
     if (st === 'complete') return;
-    renderChecks(n, lesson.checks?.length ? lesson.checks : [lesson.check].filter(Boolean));
+    renderChecks(n, lesson.checks?.length ? lesson.checks : [lesson.check].filter(Boolean), lesson.checkAtoms || []);
   }).catch(() => {
     $('#sheet-content').innerHTML =
       '<p class="sheet-error">Could not load this lesson. <button class="ghost" id="retry-lesson">Retry</button></p>';
@@ -732,14 +744,10 @@ function openSheet(n, st) {
 
 async function loadLesson(n) {
   if (S.lessonCache.has(n.id)) return S.lessonCache.get(n.id);
-  const res = await fetch('/api/node', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ topic: S.topic, id: n.id, title: n.title, summary: n.summary, goal: S.goal }),
-    signal: AbortSignal.timeout(90000),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
+  const data = await post('/api/lesson', {
+    topic: S.topic, goal: S.goal, capstone: S.capstone,
+    id: S.current, stageId: n.id,
+  }, 120000);
   if (!data.lesson) throw new Error('no lesson');
   S.lessonCache.set(n.id, data.lesson);
   return data.lesson;
@@ -753,7 +761,10 @@ async function loadLesson(n) {
  * wall of four questions reads as a test, and because a wrong answer should be
  * something you correct and move past, not something you scroll away from.
  */
-function renderChecks(n, checks) {
+let lessonChecks = { atoms: [] };
+
+function renderChecks(n, checks, atoms = []) {
+  lessonChecks = { atoms };
   if (!checks || !checks.length) { completeNode(n); return; }
   const box = $('#check-opts');
   $('#sheet-check').classList.remove('hidden');
@@ -778,14 +789,21 @@ function renderChecks(n, checks) {
         if (idx !== check.answerIndex) {
           b.classList.add('wrong');
           b.disabled = true;
-          observe('check.wrong', { id: n.id, n: i + 1, chose: idx });
+          observe('check.wrong', { id: n.id, stage: S.stageById?.get(n.id)?.stage, n: i + 1, chose: idx });
+
+          // At `prove` a wrong answer is not a guess to retry — it names the
+          // atom she has not got, and that atom has a platform. Walk her back
+          // down to it rather than letting her guess until green.
+          const stage = S.stageById?.get(n.id);
+          const kc = lessonChecks.atoms?.[i];
+          if (stage?.stage === 'prove' && kc) { sendBackFor(n, kc); return; }
           toast('Not quite — try another.');
           return;
         }
         settled = true;
         b.classList.add('correct');
         $$('.opt', box).forEach((o) => (o.disabled = true));
-        $('#check-expl').textContent = check.explanation || 'Correct.';
+        $('#check-expl').textContent = check.explanation?.trim() || 'Correct.';
         $('#check-expl').classList.remove('hidden');
 
         observe('check.correct', { id: n.id, n: i + 1, of: checks.length });
@@ -815,23 +833,95 @@ function clearLevel(n) {
   const before = new Set(S.courts.filter((x) => statusOf(x) === 'available').map((x) => x.id));
   completeNode(n);
 
+  const stage = S.stageById?.get(n.id);
   const opened = S.courts.filter((m) => statusOf(m) === 'available' && !before.has(m.id));
   const banner = $('#check-cleared');
-  banner.textContent = n.goal ? 'You have reached the summit.'
-    : CLEARED[hash(n.id) % CLEARED.length] + (opened.length ? ` ${opened.length > 1 ? 'Two ways open.' : 'Moving on…'}` : '');
+
+  // Clearing `prove` is not clearing a platform — it is finishing the module.
+  if (stage?.stage === 'prove') {
+    S.doneModules.add(S.current);
+    saveGame();
+    paintCapstone();
+    observe('module.cleared', { module: S.current, done: S.doneModules.size, of: S.modules.length });
+    banner.textContent = nextModules().length ? 'Module complete. The way up appears.' : 'The summit is open.';
+    banner.classList.remove('hidden');
+    $('#check-continue').classList.remove('hidden');
+    if (S.reduced) return;
+    clearTimeout(S.clearTimer);
+    S.clearTimer = setTimeout(() => { closeSheet(); ascend(); }, 1600);
+    return;
+  }
+
+  banner.textContent = CLEARED[hash(n.id) % CLEARED.length]
+    + (opened.length ? ` ${opened.length > 1 ? 'Two ways open.' : 'Moving on…'}` : '');
   banner.classList.remove('hidden');
-  observe('level.cleared', { id: n.id, title: n.title, opened: opened.map((m) => m.id) });
+  observe('level.cleared', { id: n.id, stage: stage?.stage, opened: opened.map((m) => m.id) });
 
-  // The button stays as an escape hatch — and is the whole mechanism when
-  // motion is reduced, where nothing should move on its own.
   $('#check-continue').classList.remove('hidden');
-  if (n.goal) return;                            // celebrate() already has this
-
-  if (S.reduced) return;                         // nothing moves on its own here
+  if (S.reduced) return;
   clearTimeout(S.clearTimer);
   S.clearTimer = setTimeout(() => {
     if ($('#modal-backdrop').classList.contains('show')) closeSheet();
   }, 1500);
+}
+
+/* The climb between levels.
+ *
+ * The old level sinks away and the new one rises into its place, which is the
+ * same motion whether the way up was stairs or open air. The capstone does not
+ * move: it is in screen space, and staying put while everything else rises is
+ * exactly what makes the rest read as rising. */
+async function ascend() {
+  const ready = nextModules();
+  if (!ready.length) { celebrate(); return; }
+
+  if (ready.length > 1) {
+    // A fork between modules — the choice the module graph earned. Ask it here
+    // rather than picking for her.
+    observe('fork.module', { options: ready.map((m) => m.id) });
+    showModuleChoice(ready);
+    return;
+  }
+  await climbTo(ready[0]);
+}
+
+async function climbTo(mod) {
+  const vp = $('#viewport');
+  $('#ascend-title').textContent = mod.title;
+  $('#ascend-sub').textContent = mod.outcome;
+  $('#ascend').classList.remove('hidden');
+  observe('ascend', { to: mod.id, title: mod.title });
+
+  if (!S.reduced) {
+    vp.classList.add('ascending', 'sinking');
+    await wait(700);
+  }
+  await enterModule(mod.id, { ascending: true });
+  if (!S.reduced) {
+    vp.classList.remove('sinking');
+    vp.classList.add('arriving');
+    await wait(30);
+    vp.classList.remove('arriving');
+    await wait(850);
+    vp.classList.remove('ascending');
+  }
+  $('#ascend').classList.add('hidden');
+}
+
+/* Which way up, when the journey branches. */
+function showModuleChoice(ready) {
+  $('#choice-text').textContent = 'Two ways lead up from here.';
+  const list = $('#choice-list');
+  list.innerHTML = '';
+  for (const m of ready) {
+    const b = document.createElement('button');
+    b.className = 'choice-opt';
+    b.innerHTML = `${escapeHtml(m.title)}<small>${escapeHtml(m.outcome)}</small>`;
+    b.addEventListener('click', () => { hideChoice(); climbTo(m); });
+    list.appendChild(b);
+  }
+  $('#choice').classList.remove('hidden');
+  positionChoice();
 }
 
 function completeNode(n) {
@@ -856,7 +946,14 @@ function closeSheet() {
   const n = S.currentNode;
   if (!n || n.goal || !S.done.has(n.id)) return;
 
-  const opts = S.courts.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
+  // What this platform opened. If it opened nothing — she has just finished one
+  // branch of a fork and the other was already standing open — then anything
+  // still available in this level is where she goes next. Leaving her on a
+  // finished platform with no indication of where to go is how a level stalls.
+  let opts = S.courts.filter((m) => m.id !== n.id && m.deps.includes(n.id) && statusOf(m) === 'available');
+  if (!opts.length) {
+    opts = S.courts.filter((m) => m.id !== n.id && statusOf(m) === 'available');
+  }
   if (!opts.length) return;
 
   if (opts.length > 1) {
@@ -871,6 +968,32 @@ function closeSheet() {
   observe('advance', { from: n.id, to: opts[0].id });
   S.currentNode = opts[0];
   walkTo(opts[0], () => openSheet(opts[0], statusOf(opts[0])));
+}
+
+/* Remediation as a walk.
+ *
+ * Every distractor is built from a named misconception and every check belongs
+ * to an atom, so a wrong answer at `prove` says precisely what she has not got.
+ * The system has always known this and always answered "Not quite — try
+ * another." Now it closes the sheet and takes her back down to the platform
+ * that drilled that atom, which is the only place the gap can actually be
+ * fixed. */
+async function sendBackFor(n, kc) {
+  let to = null;
+  try {
+    const r = await post('/api/remediation', { topic: S.topic, goal: S.goal, id: S.current, kc });
+    to = r.to;
+  } catch { /* fall through to a plain retry */ }
+  const target = to && S.nodeById.get(to);
+  if (!target) { toast('Not quite — try another.'); return; }
+
+  observe('remediation', { from: n.id, to, kc });
+  closeSheet();
+  toast(`Not yet — back to “${target.title}”.`);
+  S.done.delete(n.id);
+  paintStatus();
+  S.currentNode = target;
+  walkTo(target, () => openSheet(target, statusOf(target)));
 }
 
 /* -------------------------- fork-in-the-road prompt ---------------------- */
@@ -1047,13 +1170,15 @@ async function startJourney(topic, { restore = false } = {}) {
   $('#btn-begin').disabled = true;
 
   const save = loadSave();
-  if (restore && save?.graph && save.topic?.toLowerCase() === topic.toLowerCase()) {
+  if (restore && save?.modules && save.topic?.toLowerCase() === topic.toLowerCase()) {
     Object.assign(S, {
-      topic: save.topic, title: save.title, graph: save.graph, source: save.source,
-      goal: save.goal, capstone: save.capstone, syllabus: save.syllabus,
-      done: new Set(save.done), lessonCache: new Map(),
+      topic: save.topic, title: save.title, goal: save.goal, capstone: save.capstone,
+      modules: save.modules, doneModules: new Set(save.doneModules || []),
+      done: new Set(save.done || []), lessonCache: new Map(),
     });
-    enterWorld();
+    showScreen('screen-loading');
+    cycleLoadingMessages();
+    await enterModule(save.current || nextModules()[0]?.id);
     $('#btn-begin').disabled = false;
     return;
   }
@@ -1063,21 +1188,22 @@ async function startJourney(topic, { restore = false } = {}) {
 
     showScreen('screen-loading');
     cycleLoadingMessages();
-    const [data] = await Promise.all([
-      post('/api/syllabus', {
+    const [course] = await Promise.all([
+      post('/api/course', {
         topic, goal: settled.goal, capstone: settled.capstone, spine: settled.spine,
       }),
-      wait(1400),
+      wait(900),
     ]);
-    if (!data.graph || !Array.isArray(data.graph.nodes)) throw new Error('bad graph');
+    if (!course.modules?.length) throw new Error('no modules');
 
     Object.assign(S, {
-      topic: data.topic, title: data.graph.title, graph: data.graph,
-      syllabus: data.syllabus, goal: settled.goal, capstone: settled.capstone,
-      source: data.source, done: new Set(), lessonCache: new Map(),
+      topic: course.topic, title: course.title, goal: course.goal, capstone: course.capstone,
+      modules: course.modules, doneModules: new Set(), done: new Set(),
+      source: course.source, lessonCache: new Map(),
     });
+    observe('course', { topic, source: course.source, modules: course.modules.length });
     saveGame();
-    enterWorld();
+    await enterModule(course.modules.find((m) => !m.requires.length)?.id);
   } catch (e) {
     console.error(e);
     toast('The world-builder is unreachable — is the server running?');
@@ -1085,6 +1211,59 @@ async function startJourney(topic, { restore = false } = {}) {
   } finally {
     clearInterval(loadTimer);
     $('#btn-begin').disabled = false;
+  }
+}
+
+/** Modules whose prerequisites are all finished and which are not done yet. */
+function nextModules() {
+  return S.modules.filter((m) => !S.doneModules.has(m.id) && m.requires.every((d) => S.doneModules.has(d)));
+}
+
+/* Fetch a module and make it the level she is standing in.
+ *
+ * Nothing beyond this module has to exist. That is the whole point of the
+ * two-stage build: the world may end in mist because what is past the mist has
+ * genuinely not been decided yet. */
+async function enterModule(id, { ascending = false } = {}) {
+  const mod = S.modules.find((m) => m.id === id) || nextModules()[0] || S.modules[0];
+  if (!mod) return;
+  if (!ascending) { showScreen('screen-loading'); cycleLoadingMessages(); }
+
+  let level;
+  try {
+    level = await post('/api/module', {
+      topic: S.topic, goal: S.goal, capstone: S.capstone, id: mod.id,
+    });
+  } catch (e) {
+    console.error(e);
+    toast('That part of the path could not be built.');
+    showScreen('screen-home');
+    return;
+  }
+  clearInterval(loadTimer);
+
+  S.current = mod.id;
+  S.level = level;
+  S.graph = level.graph;
+  S.stageById = new Map(level.stages.map((x) => [x.id, x]));
+  S.done = new Set();                        // stage progress is per level
+  S.lessonCache = new Map();
+  saveGame();
+  observe('level', { module: mod.id, title: mod.title, source: level.source, platforms: level.graph.nodes.length });
+
+  enterWorld();
+  prefetchNext();
+}
+
+/* Build the module after this one while she is still walking this one, so the
+ * way up is ready before she needs it and she never waits at a wall. */
+function prefetchNext() {
+  const ahead = S.modules.filter((m) => !S.doneModules.has(m.id) && m.id !== S.current
+    && m.requires.every((d) => S.doneModules.has(d) || d === S.current));
+  for (const m of ahead.slice(0, 2)) {
+    post('/api/module', { topic: S.topic, goal: S.goal, capstone: S.capstone, id: m.id })
+      .then(() => observe('prefetched', { module: m.id }))
+      .catch(() => {});
   }
 }
 
@@ -1129,21 +1308,40 @@ function enterWorld() {
   // establishing wide shot of the whole journey, then move in to walking
   // distance — close enough that the traveller reads as a figure, but far
   // enough on a phone that you can still see where the path goes
-  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.55 : 0.62), 950);
+  setTimeout(() => focusOn(start.stand, r.width < 700 ? 0.36 : 0.46), 950);
 }
 
 function updateHud() {
-  $('#hud-title').textContent = S.title || S.topic || '';
+  const mod = S.modules.find((m) => m.id === S.current);
+  $('#hud-title').textContent = mod ? mod.title : (S.title || S.topic || '');
+  $('#hud-module').textContent = mod
+    ? `${mod.outcome}` : '';
   const total = S.courts.length;
   $('#hud-count').textContent = `${S.done.size}/${total}`;
   $('#hud-fill').style.width = total ? `${(S.done.size / total) * 100}%` : '0%';
   $('#demo-badge').classList.toggle('hidden', S.source !== 'fallback');
+  paintCapstone();
+}
+
+/* The destination, fixed above the clouds. It shows the whole journey — how
+ * many modules of the course are behind her — because that is the one number
+ * the level she is standing in cannot tell her. */
+function paintCapstone() {
+  const el = $('#capstone');
+  if (!S.goal) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  $('#capstone-goal').textContent = S.goal.statement || S.title || '';
+  const n = S.doneModules.size, total = S.modules.length || 1;
+  $('#capstone-fill').style.width = `${(n / total) * 100}%`;
+  $('#capstone-count').textContent = n >= total
+    ? 'the summit is open'
+    : `${n} of ${total} stages of the climb`;
 }
 
 function refreshResume() {
   const save = loadSave();
   const b = $('#resume');
-  if (save?.graph) {
+  if (save?.modules?.length) {
     $('#resume-title').textContent = save.title || save.topic;
     b.classList.remove('hidden');
   } else b.classList.add('hidden');

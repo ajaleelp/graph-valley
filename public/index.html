@@ -84,6 +84,7 @@
       <div id="hud-center">
         <div id="hud-title">—</div>
         <div id="hud-bar"><i id="hud-fill"></i></div>
+        <div id="hud-module"></div>
       </div>
       <span id="demo-badge" class="hidden"
             title="Built-in demo content. Restart the server with ANTHROPIC_API_KEY or OPENAI_API_KEY set for fully AI-generated journeys.">demo</span>
@@ -123,7 +124,33 @@
       </g>
     </svg>
 
+    <!-- The capstone. It is drawn in SCREEN space, not world space, so it never
+         enters the world's bounding box and never scales away — which is the
+         whole reason mist can finally shrink the view. Visible from the first
+         second, reachable only at the last. -->
+    <div id="capstone" class="hidden">
+      <div id="capstone-cloud" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div id="capstone-card">
+        <span id="capstone-kicker">THE SUMMIT</span>
+        <p id="capstone-goal"></p>
+        <div id="capstone-bar"><i id="capstone-fill"></i></div>
+        <span id="capstone-count"></span>
+      </div>
+    </div>
+
+    <!-- What she has climbed past, receding below. -->
+    <div id="cloudbank" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
     <div id="labels"></div>
+  </div>
+
+  <!-- ============ THE WAY UP ============ -->
+  <div id="ascend" class="hidden" aria-live="polite">
+    <div id="ascend-card">
+      <span id="ascend-kicker">THE WAY OPENS</span>
+      <p id="ascend-title"></p>
+      <p id="ascend-sub"></p>
+    </div>
   </div>
 
   <!-- ============ PATH CHOICE ============ -->
