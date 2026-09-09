@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { lessonPrompt } from './lesson.mjs';
+import { practicePrompt, lessonPrompt } from './lesson.mjs';
 import { assemble } from './build.mjs';
 import { atom, cluster } from './fixture.mjs';
 
@@ -44,10 +44,14 @@ test('names the summit, so the lesson can say why this step matters', () => {
   assert.match(lessonPrompt(DOC, summit), /explain why light cannot escape/);
 });
 
-test('asks for a worked example and the scaffold the platform calls for', () => {
+test('asks for a worked example, and refuses to set a task', () => {
   const p = lessonPrompt(DOC, summit);
   assert.match(p, /worked example/i);
-  assert.match(p, /partial/);
+  // The scaffold moved to practicePrompt when practice became its own
+  // platform. A study platform that also sets an exercise asks her two
+  // different questions in a row.
+  assert.match(p, /do NOT set her a task/i);
+  assert.doesNotMatch(p, /now you try/i);
 });
 
 test('falls back to title and summary when the platform is unknown', () => {
@@ -88,4 +92,42 @@ test('drops a half-written check rather than showing it', async () => {
   const l = readLesson({ content: ['one'], check: { question: 'q?', options: ['a', 'b'] } });
   assert.deepEqual(l.content, ['one']);
   assert.equal(l.check, undefined);
+});
+
+/* --- practice: one question, and it is not arithmetic recall ------------ */
+
+test('practice carries the scaffold that study gave up', () => {
+  const p = practicePrompt(DOC, summit, { atoms: ['k1'] });
+  assert.match(p, /stopped before|leave her|unaided/i);
+});
+
+test('practice puts the task in the check, never twice', () => {
+  const p = practicePrompt(DOC, summit, { atoms: ['k1'] });
+  assert.match(p, /Exactly 2 short paragraphs/);
+  assert.match(p, /QUESTION BELOW is the\s+task/);
+  assert.doesNotMatch(p, /stated as a question/);
+});
+
+test('practice refuses to work out the thing it is about to ask', () => {
+  const p = practicePrompt(DOC, summit, { atoms: ['k1'] });
+  assert.match(p, /Do NOT work out.*the thing the question asks/is);
+});
+
+test('practice will not test a number she can read off the page', () => {
+  const p = practicePrompt(DOC, summit, { atoms: ['k1'] });
+  assert.match(p, /Never ask her to repeat a number/i);
+  assert.match(p, /Recalling a figure is not learning/i);
+});
+
+test('an "understand" atom is practised by explaining, not by calculating', () => {
+  const doc = { ...DOC, kcs: [{ id: 'k1', label: 'why it happens', level: 'understand' }] };
+  const p = practicePrompt(doc, summit, { atoms: ['k1'] });
+  assert.match(p, /EXPLANATION or a\s+judgement/);
+  assert.match(p, /Not a\s+calculation/);
+});
+
+test('an "apply" atom is practised by carrying out the method', () => {
+  const doc = { ...DOC, kcs: [{ id: 'k1', label: 'do the thing', level: 'apply' }] };
+  const p = practicePrompt(doc, summit, { atoms: ['k1'] });
+  assert.match(p, /worked procedure is the right shape/);
 });

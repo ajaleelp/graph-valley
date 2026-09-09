@@ -66,9 +66,12 @@ Rules:
 - Exactly 3 short paragraphs, aimed at ${doc.goal?.audience || 'a curious adult'}.
 - At most 60 words each. This is read on a phone, on a platform in the sky —
   someone who wanted an essay would not be here.
-- One concrete worked example with real numbers or a real case, not an analogy
+- One concrete worked example — a real case, worked through, not an analogy
   standing in for one.
-- Close with a "now you try", with ${scaffold} support: ${support}.
+- Do NOT set her a task, and do not close by inviting her to attempt one. The
+  next platform is where she tries it; posing an exercise here means she is
+  asked two different questions in a row and cannot tell which she is
+  answering.
 - Plain language. No preamble, no "in this lesson we will".
 ${needChecks ? QUIZ_ASK : '- Do not write a quiz; the checks already exist.'}`;
 }
@@ -143,39 +146,60 @@ function readCheck(c) {
 export function practicePrompt(doc, node, { atoms = [], needChecks = true } = {}) {
   const byKc = new Map((doc?.kcs || []).map((k) => [k.id, k]));
   const label = (id) => byKc.get(id)?.label || id;
+  const ids = atoms.length ? atoms : node?.teaches || [];
   const scaffold = node?.segments?.find((s) => s.kind === 'apply')?.scaffold || 'partial';
   const support = {
-    full: 'give every step but the last, and let her supply only that',
-    partial: 'give the setup and the first step or two; leave the rest',
+    full: 'give almost the whole method, and leave her the last move',
+    partial: 'give the setup and show the method starting, then stop',
     none: 'give the situation only; she works it unaided',
-  }[scaffold] || 'give the setup and the first step or two; leave the rest';
+  }[scaffold] || 'give the setup and show the method starting, then stop';
 
-  return `Course: "${doc?.topic || ''}". She has just worked through an example of:
-${(atoms.length ? atoms : node?.teaches || []).map((id) => `- ${label(id)}`).join('\n')}
+  // What she is being drilled on decides what "practice" even means. An
+  // "understand" atom is not practised by arithmetic: finishing a calculation
+  // tests multiplication, and the platform claims to be teaching an idea.
+  const LV = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+  const level = ids.map((id) => byKc.get(id)?.level).filter(Boolean)
+    .reduce((a, b) => (LV.indexOf(b) > LV.indexOf(a) ? b : a), 'understand');
+  const kind = LV.indexOf(level) <= 1
+    ? `This is pitched at "${level}", so what she finishes is an EXPLANATION or a
+judgement — why this happens, which case this is, what follows from it. Not a
+calculation. Finishing a sum would test her arithmetic and tell neither of you
+anything about the idea.`
+    : `This is pitched at "${level}", so a worked procedure is the right shape —
+she carries out the method, not merely describes it.`;
+
+  return `Course: "${doc?.topic || ''}". She has just been shown a worked example of:
+${ids.map((id) => `- ${label(id)}`).join('\n')}
+
+${kind}
 
 Now set her ONE problem on exactly those, and ${support}.
 
 {"content": ["the situation, in one short paragraph",
-             "the steps you are giving her, as a short worked opening",
-             "what is left for her to finish, stated as a question"]${needChecks ? ',\n "checks": [ ... ]' : ''}}
+             "the method starting, stopped before the part she must do"]${needChecks ? ',\n "checks": [ ... ]' : ''}}
 
 Rules:
-- Exactly 3 short paragraphs, at most 50 words each.
-- Concrete: real numbers, a real case. Not "consider a scenario".
-- Do NOT give the answer to the part you are leaving her.
+- Exactly 2 short paragraphs, at most 50 words each.
+- Concrete: a real case, not "consider a scenario".
+- Do NOT state the task as a question in the content. The QUESTION BELOW is the
+  task. Writing it twice — once as prose and once as a check — leaves her
+  reading two different questions and unsure which she is answering.
+- Do NOT work out, anywhere in the content, the thing the question asks for.
+  If the answer is sitting above the question, the question tests reading.
 ${needChecks ? `
-Then TWO multiple-choice questions ABOUT THIS PROBLEM — the situation above,
-its numbers, and what you left her to work out. Not general questions about
-the topic: she has just done a specific thing, and this is where she finds out
-whether she did it right.
+Then TWO multiple-choice questions. The FIRST is the task itself — the part you
+stopped before. The SECOND asks what the result MEANS, or why the method works.
 {"checks": [{"question": "...", "options": ["a","b","c","d"],
              "answerIndex": 0, "explanation": "why that one is right"}]}
 - Exactly four options each, one unambiguously correct.
-- The wrong ones must be the mistakes someone would actually make ON THIS
-  PROBLEM — an off-by-one, the wrong ratio, the right method misapplied.
-- The FIRST question must be about the part you left her to work out. Asking
-  her to repeat a number you already gave her in the worked opening tests
-  nothing but whether she can read.
+- Never ask her to repeat a number that already appears in the content.
+- At most ONE of the two may have a number for an answer, and only where the
+  quantity is genuinely the point. Recalling a figure is not learning unless
+  that figure is load-bearing — otherwise ask what it shows, what it rules out,
+  or what would change it.
+- Wrong options must be REASONING errors someone learning this actually makes,
+  not arithmetic slips. "They confused the two directions" teaches something;
+  "they multiplied by the wrong number" does not.
 - Never "none of these"; never a restatement of another option.` : '- No quiz, no options — the check comes afterwards.'}`;
 }
 
