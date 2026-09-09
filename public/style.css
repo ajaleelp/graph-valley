@@ -478,25 +478,47 @@ button { font: inherit; color: inherit; }
   backdrop-filter: blur(3px);
   z-index: 20;
 }
-#modal-backdrop.show { display: block; }
+/* The lesson is a CENTRED dialog, not a bottom sheet.
+ *
+ * It used to sit flush against the bottom edge and grow upward, which meant
+ * that the moment the lesson loaded — skeleton replaced by three paragraphs and
+ * then a quiz appended under them — the bottom of it was against the edge of
+ * the screen, under the browser chrome on a phone, and consistently looked cut
+ * off. Centring it in a grid and capping its height means the box can never
+ * exceed the space available however much content arrives: it scrolls inside
+ * itself instead of running off. */
+#modal-backdrop.show {
+  display: grid;
+  place-items: center;
+  padding:
+    max(20px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
 
 #sheet {
-  position: absolute; left: 50%; bottom: 0;
-  transform: translateX(-50%);
+  position: relative;
   width: min(640px, 100%);
-  max-height: 84vh; overflow: auto;
+  max-height: 100%;                 /* the grid cell, already inset by padding */
+  overflow-y: auto;
+  overscroll-behavior: contain;     /* scrolling the lesson must not pan the world */
+  -webkit-overflow-scrolling: touch;
   background: var(--paper);
-  border-radius: 28px 28px 0 0;
-  padding: 28px 30px 38px;
-  box-shadow: 0 -18px 60px rgba(60, 40, 60, 0.28);
-  animation: rise 0.35s ease-out;
+  border-radius: 24px;
+  padding: 28px 30px 30px;
+  box-shadow: 0 24px 70px rgba(60, 40, 60, 0.3);
+  animation: sheet-in 0.32s ease-out;
 }
-@keyframes rise { from { transform: translate(-50%, 34px); opacity: 0; } }
+@keyframes sheet-in { from { transform: translateY(22px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #sheet { animation: none; } }
+
+/* The close button scrolls with the content in a scrolling box, so pin it to
+   the sheet's own top-right and keep the heading clear of it. */
+#sheet-close { position: sticky; float: right; }
 
 #sheet-close {
-  position: absolute; top: 14px; right: 18px;
+  top: 0; right: -6px; margin-left: 12px;
   border: none; background: none; font-size: 26px; line-height: 1;
-  color: var(--ink-soft); cursor: pointer;
+  color: var(--ink-soft); cursor: pointer; z-index: 2;
 }
 #sheet-close:hover { color: var(--ink); }
 

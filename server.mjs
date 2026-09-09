@@ -23,8 +23,8 @@ import { toGraph, titleFor } from './curriculum/project.mjs';
 import { planModules } from './curriculum/modules.mjs';
 import { toStages, stagesToGraph, remediationFor } from './curriculum/stages.mjs';
 import {
-  lessonPrompt as syllabusLessonPrompt, practicePrompt, stageLesson,
-  LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM, readLesson,
+  lessonPrompt as syllabusLessonPrompt, practicePrompt, stageLesson, quizPrompt,
+  LESSON_SYSTEM as SYLLABUS_LESSON_SYSTEM, readLesson, readChecks,
 } from './curriculum/lesson.mjs';
 
 const PORT = Number(process.env.PORT || 3217);
@@ -284,7 +284,12 @@ async function moduleFor(topic, body, moduleId) {
   const course = await courseFor(topic, body);
   const mod = course.modules.find((m) => m.id === moduleId) || course.modules[0];
   const key = `${keyFor(topic, body.goal)}::${mod.id}`;
-  if (moduleCache.has(key)) return { ...moduleCache.get(key), source: 'cache' };
+  // `cached` is a separate flag, deliberately. Overwriting `source` with
+  // 'cache' hid the fact that a syllabus had FALLEN BACK, and every guard
+  // downstream that asks "is this syllabus real?" then answered yes and served
+  // the template's filler questions — "the accurate statement", "the words are
+  // interchangeable" — to a learner who had just worked a real problem.
+  if (moduleCache.has(key)) return { ...moduleCache.get(key), cached: true };
 
   // The module's outcome IS the goal, at module scale. That is the whole reason
   // this validates where a whole course does not: the same rules, over five
@@ -404,20 +409,43 @@ async function handleLesson(req, res) {
   // The two stages that are not writing.
   const canned = stageLesson(stage.stage, { atoms, labels, goal: built.doc.goal?.statement });
   if (canned) {
-    const lesson = { ...canned, checks: stage.checks.map(toRendererCheck) };
+    // Recall and prove write no prose, but they still examine — and a syllabus
+    // that fell back has nothing worth examining with, so ask for questions.
+    let checks = built.source !== 'fallback' && stage.checks?.length
+      ? stage.checks.map(toRendererCheck) : [];
+    let checkAtoms = checks.length ? stage.checks.map((c) => c.kc || null) : [];
+    if (!checks.length) {
+      let raw = null;
+      try {
+        raw = await llm(SYLLABUS_LESSON_SYSTEM,
+          quizPrompt(built.doc, atoms.map((a) => labels.get(a) || a), stage.stage), 1400);
+      } catch (e) { note('lesson.error', { topic, stage: stage.stage, message: e.message }); }
+      checks = readChecks(extractJson(raw) || {});
+      checkAtoms = checks.map(() => null);
+    }
+    const lesson = { ...canned, checks, checkAtoms };
     lesson.check = lesson.checks[0];
     lessonCache.set(key, lesson);
-    note('lesson', { topic, id: body.id, stage: stage.stage, source: 'stage', checks: lesson.checks.length });
+    note('lesson', {
+      topic, id: body.id, stage: stage.stage, source: 'stage',
+      syllabus: built.source, checks: lesson.checks.length,
+      checkSource: checkAtoms.some(Boolean) ? 'syllabus' : 'llm',
+    });
     return send(res, 200, { lesson, source: 'stage' });
   }
 
   const group = built.doc.nodes.find((n) => (n.teaches || []).some((k) => atoms.includes(k)));
   const syllabusIsReal = built.source !== 'fallback';
-  const needChecks = !syllabusIsReal || !stage.checks?.length;
+
+  // Practice is ALWAYS examined on the problem it just set. The syllabus's
+  // checks are good questions about the atoms, but after working through a
+  // watering-can calculation you should be asked about the watering can — not
+  // "why is flour used", however well sourced that question is.
+  const ownChecks = stage.stage === 'practice' || !syllabusIsReal || !stage.checks?.length;
 
   const prompt = stage.stage === 'practice'
-    ? practicePrompt(built.doc, group, { atoms })
-    : syllabusLessonPrompt(built.doc, group, { topic, title: stage.title, summary: stage.summary }, { needChecks });
+    ? practicePrompt(built.doc, group, { atoms, needChecks: true })
+    : syllabusLessonPrompt(built.doc, group, { topic, title: stage.title, summary: stage.summary }, { needChecks: ownChecks });
 
   let raw = null;
   try {
@@ -430,17 +458,18 @@ async function handleLesson(req, res) {
   const source = lesson ? 'llm' : 'fallback';
   if (!lesson) lesson = fallbackLesson(topic, stage.title, stage.summary);
 
-  if (syllabusIsReal && stage.checks?.length) lesson.checks = stage.checks.map(toRendererCheck);
+  const useSyllabus = !ownChecks && syllabusIsReal && stage.checks?.length;
+  if (useSyllabus) lesson.checks = stage.checks.map(toRendererCheck);
   else if (!lesson.checks?.length) lesson.checks = lesson.check ? [lesson.check] : [];
   lesson.check = lesson.checks[0];
 
   // Which atom each question belongs to, so a miss can send her somewhere.
-  lesson.checkAtoms = (syllabusIsReal && stage.checks?.length)
-    ? stage.checks.map((c) => c.kc || null) : lesson.checks.map(() => null);
+  lesson.checkAtoms = useSyllabus ? stage.checks.map((c) => c.kc || null) : lesson.checks.map(() => null);
 
   lessonCache.set(key, lesson);
   note('lesson', {
     topic, id: body.id, stage: stage.stage, source,
+    syllabus: built.source, checkSource: useSyllabus ? 'syllabus' : 'llm',
     paragraphs: lesson.content.length,
     words: lesson.content.join(' ').split(/\s+/).length,
     checks: lesson.checks.length,

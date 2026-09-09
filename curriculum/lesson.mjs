@@ -110,6 +110,13 @@ export function readLesson(raw) {
   return { content, checks, check: checks[0] };
 }
 
+/* Questions with no prose around them. `readLesson` insists on content — it is
+ * reading a lesson — but recall and prove have none by design. */
+export function readChecks(raw) {
+  const offered = Array.isArray(raw?.checks) ? raw.checks : raw?.check ? [raw.check] : [];
+  return offered.map(readCheck).filter(Boolean).slice(0, 6);
+}
+
 function readCheck(c) {
   const options = Array.isArray(c?.options) ? c.options.map(String).slice(0, 4) : [];
   const answerIndex = Number(c?.answerIndex);
@@ -133,7 +140,7 @@ function readCheck(c) {
  * Renkl and Sweller's completion effect: a problem with some steps given and
  * the rest left open teaches more per minute than either a worked example she
  * only reads or a blank problem she cannot start. */
-export function practicePrompt(doc, node, { atoms = [] } = {}) {
+export function practicePrompt(doc, node, { atoms = [], needChecks = true } = {}) {
   const byKc = new Map((doc?.kcs || []).map((k) => [k.id, k]));
   const label = (id) => byKc.get(id)?.label || id;
   const scaffold = node?.segments?.find((s) => s.kind === 'apply')?.scaffold || 'partial';
@@ -150,13 +157,26 @@ Now set her ONE problem on exactly those, and ${support}.
 
 {"content": ["the situation, in one short paragraph",
              "the steps you are giving her, as a short worked opening",
-             "what is left for her to finish, stated as a question"]}
+             "what is left for her to finish, stated as a question"]${needChecks ? ',\n "checks": [ ... ]' : ''}}
 
 Rules:
 - Exactly 3 short paragraphs, at most 50 words each.
 - Concrete: real numbers, a real case. Not "consider a scenario".
 - Do NOT give the answer to the part you are leaving her.
-- No quiz, no options — the check comes afterwards.`;
+${needChecks ? `
+Then TWO multiple-choice questions ABOUT THIS PROBLEM — the situation above,
+its numbers, and what you left her to work out. Not general questions about
+the topic: she has just done a specific thing, and this is where she finds out
+whether she did it right.
+{"checks": [{"question": "...", "options": ["a","b","c","d"],
+             "answerIndex": 0, "explanation": "why that one is right"}]}
+- Exactly four options each, one unambiguously correct.
+- The wrong ones must be the mistakes someone would actually make ON THIS
+  PROBLEM — an off-by-one, the wrong ratio, the right method misapplied.
+- The FIRST question must be about the part you left her to work out. Asking
+  her to repeat a number you already gave her in the worked opening tests
+  nothing but whether she can read.
+- Never "none of these"; never a restatement of another option.` : '- No quiz, no options — the check comes afterwards.'}`;
 }
 
 /* Recall and prove need no model call at all. Recall is a doorway: name what
@@ -181,4 +201,31 @@ export function stageLesson(stage, { atoms = [], labels = new Map(), goal } = {}
     };
   }
   return null;
+}
+
+
+/* Questions with no lesson attached.
+ *
+ * `recall` and `prove` write no prose, but they still examine — and when the
+ * syllabus behind them fell back, its "checks" are template filler ("the
+ * accurate statement", "the words are interchangeable"). Filler is worse than
+ * nothing in front of a learner, so ask for real questions instead. */
+export function quizPrompt(doc, labels, stage) {
+  const what = stage === 'recall'
+    ? 'what she should already hold before going further'
+    : 'everything this part of the course taught, retrieved cold';
+  return `Course: "${doc?.topic || ''}". Goal: ${doc?.goal?.statement || ''}.
+
+Write questions on ${what}:
+${labels.map((l) => `- ${l}`).join('\n')}
+
+{"content": [], "checks": [{"question": "...", "options": ["a","b","c","d"],
+                            "answerIndex": 0, "explanation": "why that one is right"}]}
+
+Rules:
+- ${stage === 'prove' ? 'Three to five questions, one per idea above' : 'Two questions'}.
+- Exactly four options each, one unambiguously correct.
+- Ask about the substance of THIS course. Never about vocabulary in the
+  abstract, never about the lesson itself, never "none of these".
+- The wrong options must be mistakes someone learning this actually makes.`;
 }
