@@ -896,34 +896,13 @@ async function ascend() {
 }
 
 async function climbTo(mod) {
-  const vp = $('#viewport');
   // Keep the level she is leaving, to show through the cloud beneath the next
-  // one. Without it a climb arrives at a platform floating over nothing, and
-  // the ascent has no evidence behind it.
+  // one. Without it a climb arrives at a platform floating over nothing.
   if (S.world) S.belowWorld = { groups: S.world.groups, bounds: S.world.bounds };
-  $('#ascend-title').textContent = mod.title;
-  $('#ascend-sub').textContent = mod.outcome;
-  $('#ascend').classList.remove('hidden');
   observe('ascend', { to: mod.id, title: mod.title });
-
-  if (!S.reduced) {
-    vp.classList.add('ascending', 'sinking');
-    await wait(700);
-  }
-  $('#ascend').classList.add('hidden');
-  // Out to the whole course — the module she just finished now gold — and back
-  // in on the next. This is the moment she can see she is getting somewhere.
-  await revealCourse(mod.id, { dwell: 1700 });
-  await enterModule(mod.id, { ascending: true });
+  const from = S.current;
+  await climbThroughCourse(mod.id, from);
   S.ascending = false;
-  if (!S.reduced) {
-    vp.classList.remove('sinking');
-    vp.classList.add('arriving');
-    await wait(30);
-    vp.classList.remove('arriving');
-    await wait(850);
-    vp.classList.remove('ascending');
-  }
 }
 
 /* Which way up, when the journey branches. */
@@ -1210,8 +1189,7 @@ async function startJourney(topic, { restore = false } = {}) {
     const at = save.current || nextModules()[0]?.id;
     showScreen('screen-world');
     paintCapstone();
-    await revealCourse(at, { dwell: 1700 });
-    await enterModule(at);
+    await climbThroughCourse(at, null);
     $('#btn-begin').disabled = false;
     return;
   }
@@ -1239,8 +1217,7 @@ async function startJourney(topic, { restore = false } = {}) {
     const first = course.modules.find((m) => !m.requires.length)?.id;
     showScreen('screen-world');
     paintCapstone();
-    await revealCourse(first, { dwell: 2100 });
-    await enterModule(first);
+    await climbThroughCourse(first, null);
   } catch (e) {
     console.error(e);
     toast('The world-builder is unreachable — is the server running?');
@@ -1416,7 +1393,6 @@ function paintCapstone() {
  */
 function courseScene() {
   if (S.courseWorld && S.courseFor === S.modules) return S.courseWorld;
-  const r = $('#world').getBoundingClientRect();
   const graph = {
     title: S.title || S.topic,
     nodes: S.modules.map((m, i) => ({
@@ -1424,77 +1400,172 @@ function courseScene() {
       goal: i === S.modules.length - 1, level: m.level, atoms: 2,
     })),
   };
-  S.courseWorld = build(graph, {
-    viewport: [Math.max(320, r.width || 1024), Math.max(320, r.height || 640)],
-  });
+  S.courseWorld = build(graph, { viewport: stageSize() });
   S.courseFor = S.modules;
   return S.courseWorld;
 }
 
-/* Show the whole course, then fly into one castle and hand over to the level.
- * Resolves once the camera has arrived, so the caller can load behind it. */
-function revealCourse(focusId, { dwell = 1500 } = {}) {
+/* The climb between modules, as one camera move.
+ *
+ * This was three animations fighting: the world viewport slid down, the
+ * overview faded in over it and zoomed, and the next level was not built until
+ * the overview had already faded out — so it cut to an empty screen and then
+ * popped. Now there is one moving thing at a time, and the level underneath is
+ * always ready before anything uncovers it.
+ *
+ *   tight on the castle she is standing in   (matched, so it reads as a pull-back)
+ *   -> out to the whole course               she sees where she is
+ *   -> hold                                  the one behind her turns gold
+ *   -> in on the next                        while that level loads underneath
+ *   -> uncover
+ */
+const OVERVIEW = { fadeIn: 420, out: 1150, hold: 950, in: 1150, fadeOut: 520 };
+
+/* How big the stage is.
+ *
+ * `getBoundingClientRect` returns 0x0 whenever the page is not laid out — a
+ * hidden tab, a screen that has only just been shown. A camera computed from
+ * that gives a NEGATIVE fit scale, which clamps to the floor and makes "the
+ * whole course" and "one castle" the same picture, so nothing appears to move
+ * at all. That is not a hypothetical: it is what a frame-by-frame sample of
+ * this transition showed, k pinned at 0.620 from first frame to last. */
+function stageSize() {
+  // Measure the overview's OWN element. Measuring a sibling and then assuming
+  // they match is how the viewBox ended up 1024x640 on an 800x450 box, which
+  // multiplied every scale the camera asked for by 0.7 and cropped the wide
+  // shot to about half the course.
+  const el2 = $('#overview-svg') || $('#world');
+  const r = el2.getBoundingClientRect();
+  const w = r.width || window.innerWidth || 1024;
+  const h = r.height || window.innerHeight || 640;
+  return [Math.max(320, w), Math.max(320, h)];
+}
+
+function overviewCamera(world, W, H) {
+  // Measure what is actually on the screen, not what the builder said it built.
+  // `world.bounds` and the viewport are computed at different moments, and when
+  // they disagree the "whole course" shot silently crops half the course off.
+  // getBBox is the drawn extent, in the same user space the camera works in.
+  let b = world.bounds;
+  try {
+    const bb = $('#overview-view').getBBox();
+    if (bb.width > 1 && bb.height > 1) b = { x0: bb.x, y0: bb.y, x1: bb.x + bb.width, y1: bb.y + bb.height };
+  } catch { /* not laid out yet: the builder's bounds are the best we have */ }
+
+  const at = (k, cx, cy) => `translate(${W / 2 - cx * k}px, ${H / 2 - cy * k}px) scale(${k})`;
+  const pad = Math.min(70, W * 0.07, H * 0.07);
+  const wide = Math.max(1, b.x1 - b.x0), tallness = Math.max(1, b.y1 - b.y0);
+  const fitK = clamp(Math.min((W - pad * 2) / wide, (H - pad * 2) / tallness), 0.02, 0.9);
+  return {
+    fit: () => at(fitK, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2),
+    tight: (id) => {
+      const c = world.courts.find((q) => q.id === id) || world.courts[0];
+      const p = P(c.stand.x, c.stand.y, c.stand.z);
+        // Always a real push-in relative to the wide shot, never a fixed number
+      // that might happen to equal it.
+      return at(Math.min(fitK * 4, 0.85), p.x, p.y);
+    },
+  };
+}
+
+/* Move the overview camera and resolve when it has actually arrived. */
+/* Animate the CSS transform property rather than the SVG attribute. Both end
+ * up in the same place, but only one of them is reliably transitionable. */
+function glideOverview(transform, ms) {
+  const view = $('#overview-view');
+  S.camLog?.push({ at: Math.round(performance.now()), ms, transform });
   return new Promise((resolve) => {
-    // The palette is normally applied by enterWorld, which has not run yet the
-    // first time the course is shown — and without it the material variables
-    // are unset, so every locked castle renders in a default near-black instead
-    // of sitting in weather.
-    applyChapter(S.topic);
-    let world;
-    try { world = courseScene(); } catch (e) { console.warn('overview failed', e); resolve(); return; }
-    const host = $('#overview');
-    const view = $('#overview-view');
-    const svg = $('#overview-svg');
-    const r = $('#world').getBoundingClientRect();
-    const W = r.width || 1024, H = r.height || 640;
-
-    view.innerHTML = '';
-    const ready = new Set(nextModules().map((m) => m.id));
-    const elFor = new Map();
-    for (const g of world.groups) {
-      const node = el('g', { class: 'grp' });
-      const id = g.slice === 'court' ? g.id : g.edgeFrom;
-      const st = !id ? 'available'
-        : S.doneModules.has(id) ? 'complete'
-        : id === focusId || ready.has(id) ? 'available' : 'locked';
-      node.setAttribute('data-st', st);
-      shapesInto(node, g);
-      if (g.slice === 'court') elFor.set(g.id, node);
-      view.appendChild(node);
-    }
-
-    const mod = S.modules.find((m) => m.id === focusId);
-    $('#overview-title').textContent = mod ? mod.title : (S.title || '');
-    $('#overview-sub').textContent = S.doneModules.size
-      ? `${S.doneModules.size} of ${S.modules.length} behind you`
-      : `${S.modules.length} stages to the summit`;
-
-    // Fit the whole course first — this is the shot that shows her the climb.
-    const b = world.bounds;
-    const pad = 90;
-    const k = clamp(Math.min((W - pad * 2) / (b.x1 - b.x0), (H - pad * 2) / (b.y1 - b.y0)), 0.05, 0.9);
-    const at = (kk, cx, cy) => `translate(${W / 2 - cx * kk} ${H / 2 - cy * kk}) scale(${kk})`;
-    view.classList.add('instant');
-    view.setAttribute('transform', at(k, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2));
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    host.classList.remove('hidden', 'fading');
-    void view.getBoundingClientRect();
     view.classList.remove('instant');
-
-    const court = world.courts.find((c) => c.id === focusId) || world.courts[0];
-    const p = P(court.stand.x, court.stand.y, court.stand.z);
-
-    const fly = () => {
-      // ...then in, to the one she is about to walk.
-      view.setAttribute('transform', at(Math.max(k * 3.2, 0.75), p.x, p.y));
-      setTimeout(() => {
-        host.classList.add('fading');
-        setTimeout(() => { host.classList.add('hidden'); resolve(); }, 780);
-      }, S.reduced ? 0 : 1350);
-    };
-    if (S.reduced) { host.classList.add('hidden'); resolve(); return; }
-    setTimeout(fly, dwell);
+    view.style.transitionDuration = `${ms}ms`;
+    void view.getBoundingClientRect();
+    view.style.transform = transform;
+    setTimeout(resolve, ms + 40);
   });
+}
+
+function placeOverview(transform) {
+  const view = $('#overview-view');
+  S.camLog?.push({ at: Math.round(performance.now()), ms: 0, transform });
+  view.classList.add('instant');
+  view.removeAttribute('transform');          // the attribute would fight the property
+  view.style.transform = transform;
+  void view.getBoundingClientRect();          // commit before anything animates
+  view.classList.remove('instant');
+}
+
+/* Paint the castles for where she is now. Called again mid-transition so the
+ * module she has just finished turns gold while she is looking at it. */
+function paintCourse(world, focusId) {
+  const view = $('#overview-view');
+  const ready = new Set(nextModules().map((m) => m.id));
+  view.innerHTML = '';
+  for (const g of world.groups) {
+    const node = el('g', { class: 'grp' });
+    const id = g.slice === 'court' ? g.id : g.edgeFrom;
+    const st = !id ? 'available'
+      : S.doneModules.has(id) ? 'complete'
+      : id === focusId || ready.has(id) ? 'available' : 'locked';
+    node.setAttribute('data-st', st);
+    shapesInto(node, g);
+    view.appendChild(node);
+  }
+}
+
+function overviewCaption(mod) {
+  $('#overview-title').textContent = mod ? mod.title : (S.title || '');
+  $('#overview-sub').textContent = S.doneModules.size
+    ? `${S.doneModules.size} of ${S.modules.length} behind you`
+    : `${S.modules.length} stages to the summit`;
+}
+
+/* Pull out to the whole course and push in on `toId`, loading that level while
+ * the camera is still moving. `fromId` is where the pull-back starts. */
+async function climbThroughCourse(toId, fromId) {
+  applyChapter(S.topic);
+  let world;
+  try { world = courseScene(); } catch (e) { console.warn('overview failed', e); await enterModule(toId, { ascending: true }); return; }
+
+  const host = $('#overview');
+  const [W, H] = stageSize();
+  const to = S.modules.find((m) => m.id === toId);
+
+  // No viewBox: user units are CSS pixels, so a scale the camera asks for is
+  // the scale that appears. A viewBox is one more thing that has to agree with
+  // the element's real size, and it did not.
+  $('#overview-svg').removeAttribute('viewBox');
+  paintCourse(world, fromId || toId);
+  overviewCaption(S.modules.find((m) => m.id === fromId) || to);
+  host.classList.remove('hidden', 'fading');
+  const cam = overviewCamera(world, W, H);
+
+  // Start where her eye already is: tight on the castle she is standing in, or
+  // on the whole course if she has not stood anywhere yet.
+  placeOverview(fromId ? cam.tight(fromId) : cam.fit());
+
+  if (S.reduced) {                              // nothing moves on its own here
+    await enterModule(toId, { ascending: true });
+    host.classList.add('hidden');
+    return;
+  }
+
+  await wait(OVERVIEW.fadeIn);
+  if (fromId) await glideOverview(cam.fit(), OVERVIEW.out);
+
+  // She is looking at the whole climb: repaint so what she just finished is
+  // gold, and say how far along she is.
+  paintCourse(world, toId);
+  overviewCaption(to);
+  await wait(OVERVIEW.hold);
+
+  // Push in on the next castle and build that level behind the overview, so
+  // there is never a moment where nothing is underneath.
+  const loading = enterModule(toId, { ascending: true }).catch((e) => console.error(e));
+  await glideOverview(cam.tight(toId), OVERVIEW.in);
+  await loading;
+
+  host.classList.add('fading');
+  await wait(OVERVIEW.fadeOut);
+  host.classList.add('hidden');
 }
 
 /* The level she climbed past, ghosted through the cloud below her. */
@@ -1609,6 +1680,6 @@ window.gv = {
   get at() { return avatarPos; },
   walkTo, onNodeClick, onPathClick, routeTo, fitView, focusOn,
   ascend, climbTo, nextModules, enterModule, paintCapstone, paintBelow,
-  revealCourse, courseScene,
+  climbThroughCourse, courseScene,
   compose: () => S.world?.graph.compose,
 };
