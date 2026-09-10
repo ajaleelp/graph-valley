@@ -5,6 +5,7 @@ import { build } from '/world/build.js';
 import { CELL, DECK } from '/world/slices.js';
 import { findWalk, nearestNode, navKey } from '/world/nav.js';
 import { plan as planWalk, at as walkAt, duration, traveller, orderWith } from '/world/walk.js';
+import { buildSummit } from '/world/summit.js';
 
 /* TEMPORARY OBSERVABILITY. Fire-and-forget; never awaited, never blocks, never
  * throws. Delete this and its call sites to remove the tracing. */
@@ -887,6 +888,10 @@ async function ascend() {
 
 async function climbTo(mod) {
   const vp = $('#viewport');
+  // Keep the level she is leaving, to show through the cloud beneath the next
+  // one. Without it a climb arrives at a platform floating over nothing, and
+  // the ascent has no evidence behind it.
+  if (S.world) S.belowWorld = { groups: S.world.groups, bounds: S.world.bounds };
   $('#ascend-title').textContent = mod.title;
   $('#ascend-sub').textContent = mod.outcome;
   $('#ascend').classList.remove('hidden');
@@ -1294,6 +1299,7 @@ function enterWorld() {
   renderWorld();
   fitView();
 
+  paintBelow();
   observe('world', {
     topic: S.topic, source: S.source, platforms: S.courts.length,
     plan: S.world.graph.compose.plan.mode, bands: S.world.graph.compose.plan.bands,
@@ -1326,17 +1332,59 @@ function updateHud() {
 /* The destination, fixed above the clouds. It shows the whole journey — how
  * many modules of the course are behind her — because that is the one number
  * the level she is standing in cannot tell her. */
+/* Draw a built world's groups into an SVG, scaled to fit it. Used for the two
+ * places that show geometry outside the walkable world: the summit above, and
+ * the level she has climbed past below. */
+function drawInto(svg, built, pad = 8) {
+  svg.replaceChildren();
+  const b = built.bounds;
+  svg.setAttribute('viewBox',
+    `${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + pad * 2} ${b.y1 - b.y0 + pad * 2}`);
+  const frag = document.createDocumentFragment();
+  for (const g of built.groups) {
+    const node = el('g', { class: 'grp' });
+    shapesInto(node, g);
+    frag.appendChild(node);
+  }
+  svg.appendChild(frag);
+}
+
 function paintCapstone() {
-  const el = $('#capstone');
-  if (!S.goal) { el.classList.add('hidden'); return; }
-  el.classList.remove('hidden');
+  const el2 = $('#capstone');
+  if (!S.goal) { el2.classList.add('hidden'); return; }
+  el2.classList.remove('hidden');
   $('#capstone-goal').textContent = S.goal.statement || S.title || '';
   const n = S.doneModules.size, total = S.modules.length || 1;
+  const reach = total ? n / total : 0;
+
+  // The destination comes out of the mist as she climbs — the haze thins, it
+  // grows a little, and the crown lifts. Distance you can watch close is worth
+  // more than a number telling you it did.
+  el2.style.setProperty('--reach', reach.toFixed(3));
+  if (S.summitReach !== reach) {
+    S.summitReach = reach;
+    drawInto($('#capstone-sky'), buildSummit({ reach }));
+  }
+
   $('#capstone-fill').style.width = `${(n / total) * 100}%`;
   $('#capstone-count').textContent = n >= total
     ? 'the summit is open'
     : `${n} of ${total} stages of the climb — see the route`;
   paintRoute();
+}
+
+/* The level she climbed past, ghosted through the cloud below her. */
+function paintBelow() {
+  const host = $('#below');
+  if (!S.belowWorld) { host.classList.add('hidden'); return; }
+  let svg = host.querySelector('svg');
+  if (!svg) {
+    svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMax meet');
+    host.appendChild(svg);
+  }
+  drawInto(svg, S.belowWorld, 20);
+  host.classList.remove('hidden');
 }
 
 /* The whole climb, listed.
@@ -1436,6 +1484,6 @@ window.gv = {
   S,
   get at() { return avatarPos; },
   walkTo, onNodeClick, onPathClick, routeTo, fitView, focusOn,
-  ascend, climbTo, nextModules, enterModule,
+  ascend, climbTo, nextModules, enterModule, paintCapstone, paintBelow,
   compose: () => S.world?.graph.compose,
 };

@@ -129,7 +129,12 @@
          whole reason mist can finally shrink the view. Visible from the first
          second, reachable only at the last. -->
     <div id="capstone" class="hidden">
-      <div id="capstone-cloud" aria-hidden="true"><i></i><i></i><i></i></div>
+      <!-- Real geometry, drawn in screen space. It looks like a place and is
+           deliberately not one: nothing stitches to it and nothing walks on it,
+           and keeping it out of the world's bounding box is what lets the mist
+           shrink the view to what is actually near her. -->
+      <svg id="capstone-sky" aria-hidden="true" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="capstone-cloud" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <button id="capstone-card" type="button" aria-expanded="false"
               title="See the whole climb">
         <span id="capstone-kicker">THE SUMMIT</span>
@@ -146,6 +151,7 @@
     </div>
 
     <!-- What she has climbed past, receding below. -->
+    <div id="below" class="hidden" aria-hidden="true"></div>
     <div id="cloudbank" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
     <div id="labels"></div>

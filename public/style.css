@@ -626,23 +626,40 @@ button { font: inherit; color: inherit; }
    actually near her. It is what she is climbing towards, visible the whole
    way, and it does not move when she pans. */
 #capstone {
-  position: absolute; top: 146px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 92px; left: 50%; transform: translateX(-50%);
   z-index: 6; pointer-events: none; text-align: center; width: min(420px, 86vw);
+}
+
+/* The summit, above the weather.
+ *
+ * Hazed, and less so as she climbs: `--reach` runs 0..1 with the modules
+ * finished, so the destination comes out of the mist rather than a bar filling
+ * up. Distance you can see beats distance you are told. */
+#capstone-sky {
+  display: block; width: min(280px, 64vw); height: 168px; margin: 0 auto -30px;
+  overflow: visible;
+  filter: saturate(calc(0.5 + 0.5 * var(--reach, 0)))
+          blur(calc((1 - var(--reach, 0)) * 0.6px))
+          drop-shadow(0 16px 26px rgba(80, 70, 90, 0.14));
+  opacity: calc(0.8 + 0.2 * var(--reach, 0));
+  transform: scale(calc(0.9 + 0.14 * var(--reach, 0)));
+  transform-origin: 50% 100%;
+  transition: filter 1.2s ease, opacity 1.2s ease, transform 1.2s ease;
 }
 #capstone.hidden { display: none; }
 
 #capstone-card {
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: 16px; padding: 12px 18px 13px;
-  box-shadow: 0 18px 44px -26px rgba(90, 70, 80, 0.7);
-  backdrop-filter: blur(5px);
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 14px; padding: 9px 16px 10px;
+  box-shadow: 0 14px 34px -26px rgba(90, 70, 80, 0.6);
+  backdrop-filter: blur(4px);
 }
 #capstone-kicker {
   font-size: 0.62rem; letter-spacing: 0.16em; font-weight: 700;
   color: rgba(110, 90, 100, 0.65);
 }
 #capstone-goal {
-  margin: 5px 0 9px; font-size: 0.95rem; line-height: 1.32;
+  margin: 4px 0 8px; font-size: 0.86rem; line-height: 1.3;
   font-weight: 600; color: #55404a;
 }
 #capstone-bar {
@@ -656,16 +673,20 @@ button { font: inherit; color: inherit; }
   display: block; margin-top: 6px; font-size: 0.7rem; color: rgba(110, 90, 100, 0.65);
 }
 
-/* Cloud beneath it, so it reads as being up there rather than pinned to the
-   top of a rectangle. */
-#capstone-cloud { position: relative; height: 26px; }
+/* The weather it sits above.
+ *
+ * This has to be thick enough to actually cut the summit off from the world
+ * below it. The previous version was three 7px blurs and read as the card's own
+ * drop shadow. */
+#capstone-cloud { position: relative; height: 54px; margin-bottom: -6px; }
 #capstone-cloud i {
   position: absolute; display: block; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.75); filter: blur(7px);
+  background: rgba(255, 255, 255, 0.9); filter: blur(11px);
 }
-#capstone-cloud i:nth-child(1) { width: 190px; height: 22px; left: 8%;  top: 12px; }
-#capstone-cloud i:nth-child(2) { width: 130px; height: 18px; right: 4%; top: 16px; }
-#capstone-cloud i:nth-child(3) { width: 240px; height: 16px; left: 22%; top: 22px; }
+#capstone-cloud i:nth-child(1) { width: 78%; height: 30px; left: -8%;  top: 10px; }
+#capstone-cloud i:nth-child(2) { width: 62%; height: 26px; right: -12%; top: 20px; }
+#capstone-cloud i:nth-child(3) { width: 96%; height: 22px; left: 6%;   top: 30px; }
+#capstone-cloud i:nth-child(4) { width: 44%; height: 20px; left: 26%;  top: 2px; opacity: 0.75; }
 
 /* What she has climbed past, gathering at the bottom of the screen. */
 #cloudbank { position: absolute; inset: auto 0 0 0; height: 34vh; z-index: 3; pointer-events: none; }
@@ -677,6 +698,19 @@ button { font: inherit; color: inherit; }
 #cloudbank i:nth-child(2) { width: 44vw; height: 60px; right: -4vw; bottom: 8vh; }
 #cloudbank i:nth-child(3) { width: 66vw; height: 52px; left: 14vw;  bottom: -2vh; }
 #cloudbank i:nth-child(4) { width: 30vw; height: 44px; right: 18vw; bottom: 15vh; opacity: 0.6; }
+
+/* What she climbed past, showing through the cloud below her. Ghosted hard —
+   it is there to give the level something to stand above, not to be read. */
+#below {
+  position: absolute; inset: auto 0 0 0; height: 30vh; z-index: 2;
+  pointer-events: none; overflow: hidden;
+  display: grid; place-items: end center;
+  opacity: 0.3; filter: blur(2.5px) saturate(0.25);
+  mask-image: linear-gradient(to bottom, transparent, #000 62%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 62%);
+}
+#below.hidden { display: none; }
+#below svg { width: min(560px, 82vw); height: 100%; overflow: visible; }
 
 /* The moment a module opens. Brief, and it does not ask for a click. */
 #ascend {
