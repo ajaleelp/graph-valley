@@ -46,6 +46,14 @@ not a single idea, and not the whole course.
               "requires": ["ids of modules needed before this one"]}]}
 
 Rules:
+- The FIRST module must give her the SHAPE of the whole subject before any part
+  of it is examined closely — what kind of thing this is, what its major parts
+  are, and what they are called. Someone who finishes it should be able to
+  sketch the outline even though they know none of the detail yet. For a
+  political system that means naming the form of government and its branches
+  and chambers, not opening with the founding document. This is an advance
+  organiser, not an introduction: it teaches real content, and "Overview" is
+  not an acceptable title for it.
 - The LAST module must reach "${goal.level || 'apply'}", the level the goal asks
   for. Earlier modules may sit lower.
 - "requires" must form a DAG. Not every module needs to follow from exactly one

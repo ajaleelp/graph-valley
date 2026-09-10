@@ -722,3 +722,38 @@ button { font: inherit; color: inherit; }
 .mlabel[data-stage="practice"] .mlabel-step { font-style: italic; }
 .mlabel[data-stage="recall"] .mlabel-step { opacity: 0.7; }
 .choice-opt small { display: block; margin-top: 3px; font-size: 0.78em; opacity: 0.62; font-weight: 400; }
+
+/* ------------------------- the route ---------------------------------- */
+/* The climb, listed. She could see the platform she was standing on and the
+   summit above it and nothing between, which makes "not yet reached" look
+   exactly like "left out" — the complaint that prompted this was that a course
+   on a political system never mentioned its two chambers, when in fact those
+   were module three of seven and she had finished one. */
+#capstone-card {
+  display: block; width: 100%; text-align: center; border: none; font: inherit;
+  cursor: pointer; pointer-events: auto;
+}
+#capstone-card:hover { background: rgba(255, 255, 255, 0.86); }
+
+#route {
+  margin: 8px 0 0; padding: 10px; list-style: none;
+  max-height: 46vh; overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 14px; backdrop-filter: blur(5px);
+  box-shadow: 0 18px 44px -26px rgba(90, 70, 80, 0.7);
+  pointer-events: auto; text-align: left;
+}
+#route.hidden { display: none; }
+#route li {
+  display: flex; gap: 9px; align-items: baseline;
+  padding: 7px 9px; border-radius: 9px; font-size: 0.82rem; color: #6c5560;
+}
+#route li .r-mark { flex: none; width: 1.1em; text-align: center; opacity: 0.75; }
+#route li .r-title { font-weight: 560; }
+#route li .r-out { display: block; font-size: 0.92em; opacity: 0.62; font-weight: 400; }
+#route li[data-state="done"] { color: #8a7a55; }
+#route li[data-state="done"] .r-mark { color: var(--gold, #d9a838); }
+#route li[data-state="current"] { background: rgba(255, 255, 255, 0.9); color: #55404a; }
+#route li[data-state="current"] .r-mark { color: var(--accent, #c98a4b); }
+#route li[data-state="ready"] .r-mark { color: var(--accent, #c98a4b); opacity: 0.9; }
+#route li[data-state="locked"] { opacity: 0.5; }

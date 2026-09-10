@@ -130,12 +130,19 @@
          second, reachable only at the last. -->
     <div id="capstone" class="hidden">
       <div id="capstone-cloud" aria-hidden="true"><i></i><i></i><i></i></div>
-      <div id="capstone-card">
+      <button id="capstone-card" type="button" aria-expanded="false"
+              title="See the whole climb">
         <span id="capstone-kicker">THE SUMMIT</span>
         <p id="capstone-goal"></p>
         <div id="capstone-bar"><i id="capstone-fill"></i></div>
         <span id="capstone-count"></span>
-      </div>
+      </button>
+
+      <!-- The whole climb. Without this she can see the level she is standing
+           in and the summit far above and nothing in between, so a subject that
+           has simply not been reached yet is indistinguishable from one the
+           course left out. -->
+      <ol id="route" class="hidden"></ol>
     </div>
 
     <!-- What she has climbed past, receding below. -->

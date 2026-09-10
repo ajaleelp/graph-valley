@@ -171,3 +171,27 @@ test('capitalises platform titles, which are labels the learner reads', () => {
   const { nodes } = pack(spec, { budget: 3 });
   assert.equal(nodes[0].title, 'Falling and escaping');
 });
+
+test('a split cluster names each half after what it teaches, not "(1)" and "(2)"', () => {
+  const spec = {
+    topic: 'the indian political system',
+    spine: 'concept',
+    goal: { statement: 'outline the system', level: 'understand' },
+    capstone: { prompt: 'sketch it', requires: ['k4'], rubric: ['names the branches'] },
+    assumed: [],
+    kcs: [
+      { ...atom('k1', { cluster: 'Structure' }), label: 'India is a parliamentary democracy' },
+      { ...atom('k2', { cluster: 'Structure' }), label: 'the executive is led by the Prime Minister' },
+      { ...atom('k3', { cluster: 'Structure' }), label: 'the judiciary is independent of the other two' },
+      { ...atom('k4', { cluster: 'Structure', requires: ['k1'] }), label: 'Parliament has two houses' },
+    ],
+    clusters: [cluster('Structure', ['k1', 'k2', 'k3', 'k4'], 'how it is put together')],
+  };
+  const { nodes } = pack(spec, { budget: 3 });
+  assert.ok(nodes.length > 1, 'four atoms at a budget of three must split');
+  for (const n of nodes) {
+    assert.doesNotMatch(n.title, /\(\d\)\s*$/, `"${n.title}" tells her nothing about which half it is`);
+  }
+  assert.equal(new Set(nodes.map((n) => n.title)).size, nodes.length,
+    'both halves carrying the same name is the same problem with nicer words');
+});

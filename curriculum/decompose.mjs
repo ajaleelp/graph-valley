@@ -62,7 +62,7 @@ goal. Set each component's "level" to what that component actually demands.
                     "wrong": [{"text": "a wrong answer", "because": "the misconception it embodies, quoted from this component's list"},
                               {"text": "...", "because": "..."},
                               {"text": "...", "because": "..."}]}}],
- "clusters": [{"title": "2-5 words, concrete", "summary": "one sentence", "kcs": ["k1"]}],
+ "clusters": [{"title": "2-5 words naming the IDEA, readable on its own", "summary": "one sentence", "kcs": ["k1"]}],
  "capstoneRequires": ["ids of the components the capstone task actually exercises"]}
 
 Rules:
@@ -73,6 +73,10 @@ Rules:
   options may embody the same misconception. Do not order or number them; where
   the right answer sits is decided afterwards.
 - Clusters partition the components: every id appears in exactly one cluster.
+- A cluster title is shown to the learner as the name of a place she walks to,
+  with no other context. "Significance" and "Structure" are useless there —
+  significance of what? Name the idea: "What the Preamble promises", "Two
+  houses of Parliament". Never a bare role word.
 - "capstoneRequires" names the components the capstone leans on directly. Every
   other component must be reachable from those through "requires" — anything
   that isn't, the goal does not need, so do not include it.

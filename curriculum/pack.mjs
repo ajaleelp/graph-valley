@@ -157,6 +157,20 @@ export function pack(spec, { known = new Set(), budget = 3, spine } = {}) {
  *  time, and a valley labelled "compilation process (1)" reads as a stub. */
 const asLabel = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
+/* What to call a platform when its cluster had to be split.
+ *
+ * "Indian Government Structure (1)" and "(2)" tell a learner nothing about
+ * which is which, and she is choosing between them from across a valley. When
+ * a cluster is cut, name each piece after what it actually teaches — the atoms
+ * are already short statements of one idea, which is exactly the right length
+ * for the name of a place. */
+function partTitle(group, teaches, byKc) {
+  const first = byKc.get(teaches[0])?.label;
+  if (!first) return asLabel(group.title);
+  const words = String(first).replace(/[.:;]\s*$/, '').split(/\s+/);
+  return asLabel(words.slice(0, 7).join(' ') + (words.length > 7 ? '…' : ''));
+}
+
 function buildNode(seq, group, teaches, part, byKc, needsOf) {
   const inside = new Set(teaches);
   const requires = [...new Set(teaches.flatMap(needsOf))].filter((d) => !inside.has(d));
@@ -164,7 +178,7 @@ function buildNode(seq, group, teaches, part, byKc, needsOf) {
 
   return {
     id: `p${seq}`,
-    title: `${asLabel(group.title)}${part}`,
+    title: part ? partTitle(group, teaches, byKc) : asLabel(group.title),
     summary: group.summary || byKc.get(teaches[0])?.label || group.title,
     goal: false,
     objective: { verb: 'understand', level },

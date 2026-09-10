@@ -1335,7 +1335,35 @@ function paintCapstone() {
   $('#capstone-fill').style.width = `${(n / total) * 100}%`;
   $('#capstone-count').textContent = n >= total
     ? 'the summit is open'
-    : `${n} of ${total} stages of the climb`;
+    : `${n} of ${total} stages of the climb — see the route`;
+  paintRoute();
+}
+
+/* The whole climb, listed.
+ *
+ * Standing in one level with the summit far above and nothing in between makes
+ * a subject that has not been REACHED yet look exactly like one the course left
+ * out. Naming the stages costs nothing and answers the question before it is
+ * asked: the two chambers of a parliament are not missing, they are the third
+ * climb, and here it is with its name on it. */
+function paintRoute() {
+  const list = $('#route');
+  if (!S.modules?.length) { list.classList.add('hidden'); return; }
+  const ready = new Set(nextModules().map((m) => m.id));
+
+  list.innerHTML = '';
+  for (const m of S.modules) {
+    const state = S.doneModules.has(m.id) ? 'done'
+      : m.id === S.current ? 'current'
+      : ready.has(m.id) ? 'ready' : 'locked';
+    const li = document.createElement('li');
+    li.dataset.state = state;
+    li.innerHTML = `<span class="r-mark">${
+      { done: '✓', current: '◆', ready: '○', locked: '·' }[state]
+    }</span><span><span class="r-title">${escapeHtml(m.title)}</span>`
+      + `<span class="r-out">${escapeHtml(m.outcome)}</span></span>`;
+    list.appendChild(li);
+  }
 }
 
 function refreshResume() {
@@ -1368,6 +1396,13 @@ function init() {
   $('#btn-here').addEventListener('click', () => {
     const next = S.courts.find((n) => statusOf(n) === 'available') || S.nodeById.get(S.at);
     if (next) focusOn(next.stand, clamp(Math.max(view.k, 0.55), 0.14, 1.4));
+  });
+
+  // The route is folded away by default — it is reassurance, not furniture.
+  $('#capstone-card').addEventListener('click', () => {
+    const open = $('#route').classList.toggle('hidden');
+    $('#capstone-card').setAttribute('aria-expanded', String(!open));
+    observe('route.toggle', { open: !open });
   });
 
   $('#sheet-close').addEventListener('click', closeSheet);
