@@ -27,10 +27,10 @@ const FEATURES = ['pillars', 'blocks', 'obelisk', 'drum'];
  * many atoms it teaches. Nothing here is decoration: every varying thing is
  * something the syllabus already knew and the renderer used to throw away. */
 const STAGE_FEATURE = {
-  recall: 'gate',
-  study: 'pillars',
-  practice: 'blocks',
-  prove: 'summit',
+  recall: ['gate', 'arch'],
+  study: ['pillars', 'colonnade', 'arch'],
+  practice: ['blocks', 'drum', 'terrace'],
+  prove: ['summit'],
 };
 const BLOOM = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
 const bloomRank = (l) => Math.max(0, BLOOM.indexOf(l));
@@ -43,6 +43,7 @@ function hash(str) {
 
 export function build(graph, opts = {}) {
   const L = layout(graph, opts);
+  const seed = opts.seed || 0;
   const problems = L.problems.slice();
 
   // Which sides each court has to open. A court's sockets are derived from the
@@ -90,7 +91,8 @@ export function build(graph, opts = {}) {
     // A stage says what this place is FOR, and that decides what stands on it.
     // Without one — a raw DAG, or the authored test graphs — fall back to the
     // old rotation, which is what those worlds were tuned against.
-    n.feature = n.stage ? (STAGE_FEATURE[n.stage] || 'pillars')
+    const fam = STAGE_FEATURE[n.stage];
+    n.feature = fam ? fam[(seed + (n.depth || 0)) % fam.length]
       : goalIds.has(n.id) ? 'summit'
       : n.depth === 0 ? 'gate'
       : featureOf.get(n.id);

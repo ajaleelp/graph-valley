@@ -153,6 +153,47 @@ const FEATURE = {
     }
     for (const [a, b] of c.near) c.mass(F, a + 0.4, b - 0.4, c.ny, c.nd, 0, 0.7);
   },
+  /* An arcade: piers with a lintel across them, and the near side left low.
+   * Reads as a doorway from a distance, which is what a recall platform is. */
+  arch(B, F, A, c) {
+    const h = 4.4 * c.tall;
+    for (const [a, b] of c.far) {
+      c.mass(B, a, b, c.fy, c.fd, 0, h);
+      c.mass(B, a - 0.25, b + 0.25, c.fy - 0.2, c.fd + 0.4, h, 0.55, 's', 'a');
+    }
+    // the span itself, sitting on the piers rather than between them
+    c.mass(A, INSET, c.S - INSET, c.fy + 0.15, c.fd - 0.3, h + 0.55, 0.8, 's', 't');
+    for (const [a, b] of c.near) c.mass(F, a + 0.5, b - 0.5, c.ny, c.nd * 0.55, 0, 0.7);
+  },
+
+  /* A run of thin columns rather than two thick ones. Same family as pillars,
+   * a different rhythm — which is the whole point of having more than one. */
+  colonnade(B, F, A, c) {
+    const h = 5 * c.tall;
+    for (const [a, b] of c.far) {
+      const span = b - a;
+      const n = Math.max(2, Math.min(4, Math.round(span / 2.2)));
+      const w = Math.min(1.1, span / (n * 1.9));
+      for (let i = 0; i < n; i++) {
+        const x = a + (span - w) * (n === 1 ? 0.5 : i / (n - 1));
+        c.mass(B, x, x + w, c.fy + 0.3, c.fd - 0.6, 0, h);
+      }
+      c.mass(B, a, b, c.fy, c.fd, h, 0.6, 's', 't');
+    }
+    for (const [a, b] of c.near) c.mass(F, a, b, c.ny, c.nd * 0.5, 0, 0.75);
+  },
+
+  /* Stepped ground — a workbench you climb onto. Low, so it never hides her. */
+  terrace(B, F, A, c) {
+    for (const [a, b] of c.far) {
+      const mid = (a + b) / 2;
+      c.mass(B, a, mid, c.fy, c.fd, 0, 1.5 * c.tall);
+      c.mass(B, mid, b, c.fy, c.fd, 0, 2.6 * c.tall);
+      c.mass(B, mid + 0.35, b - 0.35, c.fy + 0.35, c.fd - 0.7, 2.6 * c.tall, 0.5, 's', 'a');
+    }
+    for (const [a, b] of c.near) c.mass(F, a, b, c.ny, c.nd, 0, 0.9);
+  },
+
   /* The summit. Taller towers, an accent floor, and a mass floating over the
    * middle — high enough to walk under, so it blocks no lane. */
   summit(B, F, A, c) {

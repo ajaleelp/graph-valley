@@ -158,13 +158,19 @@ function orderLayers(nodes, reduced, maxDepth) {
  * Where a layer sits is decided by `plan`, chosen in compose.js from the shape
  * of the screen the world will be seen on. The plan only moves courts around;
  * every socket, seam and climb rule downstream is untouched by it. */
-export function placeNodes(nodes, reduced, maxDepth, plan) {
+export function placeNodes(nodes, reduced, maxDepth, plan, variant = {}) {
   const layers = orderLayers(nodes, reduced, maxDepth);
   const anch = anchors(plan, maxDepth + 1);
+  const { mirror = false, laneSign = 1 } = variant;
   layers.forEach((layer, d) => {
     layer.forEach((n, i) => {
-      const o = centred(i, layer.length);
-      const cell = { u: anch[d].u + o * plan.lane.u, v: anch[d].v + o * plan.lane.v };
+      const o = centred(i, layer.length) * laneSign;
+      let cell = { u: anch[d].u + o * plan.lane.u, v: anch[d].v + o * plan.lane.v };
+      // Mirroring swaps the two grid axes, which reflects the whole world
+      // across the screen's vertical. Chebyshev distances are unchanged, so
+      // every clearance the layout depends on survives it untouched — and two
+      // modules of the same shape stop being the same picture.
+      if (mirror) cell = { u: cell.v, v: cell.u };
       n.cell = cell;
       n.z = d * FLOOR;
       n.cells = [];
@@ -414,7 +420,7 @@ function attempt(order, byId, bounds, wide, hug, allowCross) {
   return { routes, failed, problems, crossings };
 }
 
-export function layout(graph, { viewport = [1440, 810] } = {}) {
+export function layout(graph, { viewport = [1440, 810], seed = 0 } = {}) {
   const nodes = graph.nodes.map((n) => ({ ...n, deps: (n.deps || []).slice() }));
   depths(nodes);
   const maxDepth = Math.max(...nodes.map((n) => n.depth));
@@ -432,7 +438,12 @@ export function layout(graph, { viewport = [1440, 810] } = {}) {
   const step = GAP + maxSpan;
   const chosen = composeFor({ layers: maxDepth + 1, laneCounts, span: maxSpan, viewport });
   const plan = chosen.plan;
-  placeNodes(nodes, reduced, maxDepth, plan);
+  // Every module produces the same stage shape — study, practice, study,
+  // practice, prove — so without this every module is the same picture in a
+  // different palette. The seed is the module's own, so a given module always
+  // looks like itself.
+  const variant = { mirror: !!(seed & 1), laneSign: (seed & 2) ? -1 : 1 };
+  placeNodes(nodes, reduced, maxDepth, plan, variant);
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   const us = nodes.flatMap((n) => n.cells.map((c) => c.u));
@@ -474,6 +485,6 @@ export function layout(graph, { viewport = [1440, 810] } = {}) {
   return {
     nodes, byId, routes: best.routes, crossings: best.crossings,
     maxDepth, step, bounds: wide, problems,
-    compose: { plan, box: chosen.box, score: chosen.score, viewport },
+    compose: { plan, box: chosen.box, score: chosen.score, viewport }, variant,
   };
 }

@@ -320,6 +320,36 @@ for (const [key, g] of Object.entries(GRAPHS)) {
   );
 }
 
+/* Every seed must produce a world that is legal, and different.
+ *
+ * The variants exist because every module has the same stage shape, so without
+ * them every module is the same picture. A variant that quietly broke the
+ * clearance rules would be worse than the repetition it fixes. */
+console.log('\n--- layout variants ---');
+{
+  const g = GRAPHS.branching;
+  const seen = new Set();
+  for (let seed = 0; seed < 4; seed++) {
+    const w = build(g, { seed });
+    check(`variant ${seed}: builds clean`, w.problems.length === 0, w.problems.slice(0, 2).join('; '));
+    const start = w.courts.find((c) => c.depth === 0);
+    const goal = w.courts.reduce((a, b) => (b.depth > a.depth ? b : a));
+    check(`variant ${seed}: still walkable end to end`,
+      !!findWalk(w.nav, start.navKey, goal.navKey));
+    seen.add(w.courts.map((c) => `${c.cell.u},${c.cell.v}`).join('|'));
+  }
+  check('the variants actually differ', seen.size > 1, `${seen.size} distinct layouts from 4 seeds`);
+
+  // and the architecture varies with them
+  const feats = new Set();
+  for (let seed = 0; seed < 4; seed++) {
+    const stages = GRAPHS.branching.nodes.map((n, i) => ({ ...n, stage: ['study', 'practice'][i % 2] }));
+    const w = build({ ...GRAPHS.branching, nodes: stages }, { seed });
+    for (const n of w.graph.nodes) feats.add(`${n.stage}:${n.feature}`);
+  }
+  check('a stage is not always the same building', feats.size > 2, [...feats].join(' '));
+}
+
 console.log('\n--- 200 random DAGs ---');
 let worstProblems = null;
 for (let seed = 1; seed <= 200; seed++) {

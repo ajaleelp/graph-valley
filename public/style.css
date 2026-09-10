@@ -791,3 +791,42 @@ button { font: inherit; color: inherit; }
 #route li[data-state="current"] .r-mark { color: var(--accent, #c98a4b); }
 #route li[data-state="ready"] .r-mark { color: var(--accent, #c98a4b); opacity: 0.9; }
 #route li[data-state="locked"] { opacity: 0.5; }
+
+/* ---------------------- the whole climb, seen at once ------------------- */
+/* Modules disappearing into cloud below told her nothing about getting
+   closer to anything. So before each one she sees the entire course — every
+   module a castle, the finished ones gold — and the camera flies into the one
+   she is about to walk. Progress you watch happen beats progress you are told
+   about, and it costs one extra scene built by the engine she already has. */
+#overview {
+  position: absolute; inset: 0; z-index: 18;
+  background: radial-gradient(120% 90% at 50% 20%,
+    rgba(255, 253, 250, 0.55), rgba(238, 240, 248, 0.9));
+  backdrop-filter: blur(1px);
+  opacity: 1; transition: opacity 0.75s ease;
+}
+#overview.hidden { display: none; }
+#overview.fading { opacity: 0; pointer-events: none; }
+#overview-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#overview-view { transition: transform 1.5s cubic-bezier(0.5, 0, 0.2, 1); }
+#overview-view.instant { transition: none; }
+
+#overview-caption {
+  position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%);
+  text-align: center; max-width: min(460px, 88vw);
+  background: rgba(255, 255, 255, 0.78); backdrop-filter: blur(5px);
+  border-radius: 15px; padding: 11px 20px;
+  box-shadow: 0 18px 44px -28px rgba(90, 70, 80, 0.75);
+}
+#overview-title { display: block; font-size: 1.02rem; font-weight: 620; color: #55404a; }
+#overview-sub { display: block; margin-top: 2px; font-size: 0.82rem; color: #86636c; }
+
+/* A castle she has finished is gold; the one she is going to glows; the rest
+   sit in weather. Same attributes the walkable world uses, same CSS. */
+#overview .grp { transition: opacity 0.6s ease; }
+#overview .grp[data-st="locked"] { opacity: 0.4; filter: blur(1.4px) saturate(0.3); }
+#overview .grp[data-st="available"] { animation: beacon 3.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  #overview-view { transition: none; }
+  #overview .grp[data-st="available"] { animation: none; }
+}

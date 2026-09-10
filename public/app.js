@@ -910,6 +910,10 @@ async function climbTo(mod) {
     vp.classList.add('ascending', 'sinking');
     await wait(700);
   }
+  $('#ascend').classList.add('hidden');
+  // Out to the whole course — the module she just finished now gold — and back
+  // in on the next. This is the moment she can see she is getting somewhere.
+  await revealCourse(mod.id, { dwell: 1700 });
   await enterModule(mod.id, { ascending: true });
   S.ascending = false;
   if (!S.reduced) {
@@ -920,7 +924,6 @@ async function climbTo(mod) {
     await wait(850);
     vp.classList.remove('ascending');
   }
-  $('#ascend').classList.add('hidden');
 }
 
 /* Which way up, when the journey branches. */
@@ -1204,9 +1207,11 @@ async function startJourney(topic, { restore = false } = {}) {
       modules: save.modules, doneModules: new Set(save.doneModules || []),
       done: new Set(save.done || []), lessonCache: new Map(),
     });
-    showScreen('screen-loading');
-    cycleLoadingMessages();
-    await enterModule(save.current || nextModules()[0]?.id);
+    const at = save.current || nextModules()[0]?.id;
+    showScreen('screen-world');
+    paintCapstone();
+    await revealCourse(at, { dwell: 1700 });
+    await enterModule(at);
     $('#btn-begin').disabled = false;
     return;
   }
@@ -1231,7 +1236,11 @@ async function startJourney(topic, { restore = false } = {}) {
     });
     observe('course', { topic, source: course.source, modules: course.modules.length });
     saveGame();
-    await enterModule(course.modules.find((m) => !m.requires.length)?.id);
+    const first = course.modules.find((m) => !m.requires.length)?.id;
+    showScreen('screen-world');
+    paintCapstone();
+    await revealCourse(first, { dwell: 2100 });
+    await enterModule(first);
   } catch (e) {
     console.error(e);
     toast('The world-builder is unreachable — is the server running?');
@@ -1307,7 +1316,9 @@ function enterWorld() {
   // layout serves both. See world/compose.js.
   const r = $('#world').getBoundingClientRect();
   const viewport = [Math.max(320, r.width || 1024), Math.max(320, r.height || 640)];
-  S.world = build(S.graph, { viewport });
+  // The module's own seed, so its world varies from its neighbours' and stays
+  // the same every time she comes back to it.
+  S.world = build(S.graph, { viewport, seed: hash(S.current || '') });
   if (S.world.problems.length) console.warn('world problems:', S.world.problems);
 
   S.courts = S.world.courts;
@@ -1394,6 +1405,96 @@ function paintCapstone() {
     ? 'the summit is open'
     : `${n} of ${total} stages of the climb — see the route`;
   paintRoute();
+}
+
+/* ------------------------ the whole climb, as a world ------------------- */
+
+/* The course is a graph of modules, and this project's entire premise is that
+ * a graph of things to learn can be a place. So the overview is not a diagram
+ * of the journey — it is the journey, built by the same engine, one scale up:
+ * a castle per module, a walkway per prerequisite, gold for what is behind her.
+ */
+function courseScene() {
+  if (S.courseWorld && S.courseFor === S.modules) return S.courseWorld;
+  const r = $('#world').getBoundingClientRect();
+  const graph = {
+    title: S.title || S.topic,
+    nodes: S.modules.map((m, i) => ({
+      id: m.id, title: m.title, summary: m.outcome, deps: m.requires,
+      goal: i === S.modules.length - 1, level: m.level, atoms: 2,
+    })),
+  };
+  S.courseWorld = build(graph, {
+    viewport: [Math.max(320, r.width || 1024), Math.max(320, r.height || 640)],
+  });
+  S.courseFor = S.modules;
+  return S.courseWorld;
+}
+
+/* Show the whole course, then fly into one castle and hand over to the level.
+ * Resolves once the camera has arrived, so the caller can load behind it. */
+function revealCourse(focusId, { dwell = 1500 } = {}) {
+  return new Promise((resolve) => {
+    // The palette is normally applied by enterWorld, which has not run yet the
+    // first time the course is shown — and without it the material variables
+    // are unset, so every locked castle renders in a default near-black instead
+    // of sitting in weather.
+    applyChapter(S.topic);
+    let world;
+    try { world = courseScene(); } catch (e) { console.warn('overview failed', e); resolve(); return; }
+    const host = $('#overview');
+    const view = $('#overview-view');
+    const svg = $('#overview-svg');
+    const r = $('#world').getBoundingClientRect();
+    const W = r.width || 1024, H = r.height || 640;
+
+    view.innerHTML = '';
+    const ready = new Set(nextModules().map((m) => m.id));
+    const elFor = new Map();
+    for (const g of world.groups) {
+      const node = el('g', { class: 'grp' });
+      const id = g.slice === 'court' ? g.id : g.edgeFrom;
+      const st = !id ? 'available'
+        : S.doneModules.has(id) ? 'complete'
+        : id === focusId || ready.has(id) ? 'available' : 'locked';
+      node.setAttribute('data-st', st);
+      shapesInto(node, g);
+      if (g.slice === 'court') elFor.set(g.id, node);
+      view.appendChild(node);
+    }
+
+    const mod = S.modules.find((m) => m.id === focusId);
+    $('#overview-title').textContent = mod ? mod.title : (S.title || '');
+    $('#overview-sub').textContent = S.doneModules.size
+      ? `${S.doneModules.size} of ${S.modules.length} behind you`
+      : `${S.modules.length} stages to the summit`;
+
+    // Fit the whole course first — this is the shot that shows her the climb.
+    const b = world.bounds;
+    const pad = 90;
+    const k = clamp(Math.min((W - pad * 2) / (b.x1 - b.x0), (H - pad * 2) / (b.y1 - b.y0)), 0.05, 0.9);
+    const at = (kk, cx, cy) => `translate(${W / 2 - cx * kk} ${H / 2 - cy * kk}) scale(${kk})`;
+    view.classList.add('instant');
+    view.setAttribute('transform', at(k, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2));
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    host.classList.remove('hidden', 'fading');
+    void view.getBoundingClientRect();
+    view.classList.remove('instant');
+
+    const court = world.courts.find((c) => c.id === focusId) || world.courts[0];
+    const p = P(court.stand.x, court.stand.y, court.stand.z);
+
+    const fly = () => {
+      // ...then in, to the one she is about to walk.
+      view.setAttribute('transform', at(Math.max(k * 3.2, 0.75), p.x, p.y));
+      setTimeout(() => {
+        host.classList.add('fading');
+        setTimeout(() => { host.classList.add('hidden'); resolve(); }, 780);
+      }, S.reduced ? 0 : 1350);
+    };
+    if (S.reduced) { host.classList.add('hidden'); resolve(); return; }
+    setTimeout(fly, dwell);
+  });
 }
 
 /* The level she climbed past, ghosted through the cloud below her. */
@@ -1508,5 +1609,6 @@ window.gv = {
   get at() { return avatarPos; },
   walkTo, onNodeClick, onPathClick, routeTo, fitView, focusOn,
   ascend, climbTo, nextModules, enterModule, paintCapstone, paintBelow,
+  revealCourse, courseScene,
   compose: () => S.world?.graph.compose,
 };
