@@ -132,6 +132,7 @@ function saveGame() {
       topic: S.topic, title: S.title, source: S.source,
       goal: S.goal, capstone: S.capstone,
       modules: S.modules, doneModules: [...S.doneModules],
+      source: S.source,
       current: S.current, done: [...S.done],
     }));
   } catch { /* private mode */ }
@@ -778,6 +779,7 @@ function renderChecks(n, checks, atoms = []) {
     box.innerHTML = '';
     $('#check-expl').classList.add('hidden');
     $('#check-cleared').classList.add('hidden');
+    $('#check-continue').textContent = 'Continue journey →';
     $('#check-continue').classList.add('hidden');
     let settled = false;
 
@@ -846,10 +848,14 @@ function clearLevel(n) {
     observe('module.cleared', { module: S.current, done: S.doneModules.size, of: S.modules.length });
     banner.textContent = nextModules().length ? 'Module complete. The way up appears.' : 'The summit is open.';
     banner.classList.remove('hidden');
+    $('#check-continue').textContent = nextModules().length ? 'Climb to the next stage →' : 'To the summit →';
     $('#check-continue').classList.remove('hidden');
+    // Closing the sheet is what climbs — see closeSheet. Doing it here as well
+    // meant the button and the timer were two different ways on, and pressing
+    // the button cancelled the timer and took the way that did nothing.
     if (S.reduced) return;
     clearTimeout(S.clearTimer);
-    S.clearTimer = setTimeout(() => { closeSheet(); ascend(); }, 1600);
+    S.clearTimer = setTimeout(closeSheet, 1600);
     return;
   }
 
@@ -873,13 +879,16 @@ function clearLevel(n) {
  * move: it is in screen space, and staying put while everything else rises is
  * exactly what makes the rest read as rising. */
 async function ascend() {
+  if (S.ascending) return;                       // the button and the timer both lead here
   const ready = nextModules();
   if (!ready.length) { celebrate(); return; }
+  S.ascending = true;
 
   if (ready.length > 1) {
     // A fork between modules — the choice the module graph earned. Ask it here
     // rather than picking for her.
     observe('fork.module', { options: ready.map((m) => m.id) });
+    S.ascending = false;                         // her choice releases it
     showModuleChoice(ready);
     return;
   }
@@ -902,6 +911,7 @@ async function climbTo(mod) {
     await wait(700);
   }
   await enterModule(mod.id, { ascending: true });
+  S.ascending = false;
   if (!S.reduced) {
     vp.classList.remove('sinking');
     vp.classList.add('arriving');
@@ -942,14 +952,26 @@ function completeNode(n) {
       setTimeout(() => g?.classList.remove('born'), 1000);
     }
   }
-  if (n.goal) setTimeout(celebrate, 700);
+  // NOT here. `goal` marks the summit of a LEVEL — the prove platform — and
+  // there is one of those per module. The journey ends when the last module is
+  // done, which `ascend` is the only thing in a position to know.
 }
 
 function closeSheet() {
   clearTimeout(S.clearTimer);                    // she pressed on before we did
   $('#modal-backdrop').classList.remove('show');
   const n = S.currentNode;
-  if (!n || n.goal || !S.done.has(n.id)) return;
+  if (!n || !S.done.has(n.id)) return;
+
+  // Finishing `prove` finishes the module, and then the only way on is up.
+  // This used to fall through the `n.goal` guard below and stop dead, so
+  // clearing a module left her standing on the platform she had just cleared
+  // with six more waiting that she could see listed and never reach.
+  if (S.stageById?.get(n.id)?.stage === 'prove') {
+    if (S.doneModules.has(S.current)) ascend();
+    return;
+  }
+  if (n.goal) return;
 
   // What this platform opened. If it opened nothing — she has just finished one
   // branch of a fork and the other was already standing open — then anything
@@ -1034,8 +1056,9 @@ function positionChoice() {
 
 function celebrate() {
   closeSheet();
-  const ordered = [...S.courts].sort((a, b) => a.depth - b.depth || a.cell.v - b.cell.v);
-  $('#recap').innerHTML = ordered.map((n) => `<li>${escapeHtml(n.title)}</li>`).join('');
+  // What she climbed, which is the modules — not the platforms of whichever
+  // level she happened to finish on.
+  $('#recap').innerHTML = S.modules.map((m) => `<li>${escapeHtml(m.title)}</li>`).join('');
   $('#cel-title').textContent = S.title || S.topic;
   $('#cel-overlay').classList.remove('hidden');
   fitView(true);
