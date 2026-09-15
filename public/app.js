@@ -7,8 +7,8 @@ import { findWalk, nearestNode, navKey } from '/world/nav.js';
 import { plan as planWalk, at as walkAt, duration, traveller, orderWith } from '/world/walk.js';
 import { buildSummit } from '/world/summit.js';
 
-/* TEMPORARY OBSERVABILITY. Fire-and-forget; never awaited, never blocks, never
- * throws. Delete this and its call sites to remove the tracing. */
+/* Observability. Fire-and-forget; never awaited, never blocks, never throws.
+ * Pairs with note() in server.mjs; see the comment there for why it stayed. */
 function observe(event, data = {}) {
   try {
     fetch('/api/observe', {

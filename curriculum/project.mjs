@@ -1,10 +1,10 @@
-/* Flatten a syllabus down to the graph the renderers already consume.
+/* The one thing the renderer still needs from a course document that is not
+ * geometry: what to call the journey.
  *
- * `public/` and `poc/` both read `{ id, title, summary, deps, goal }` and
- * nothing more. Keeping this projection means the curriculum work and the
- * renderer rebuild stay independent: neither renderer changes a line, and the
- * richer document is there the moment either is ready to use it.
- */
+ * This file used to also hold `toGraph`, which flattened a whole syllabus to
+ * the `{ id, title, summary, deps, goal }` shape the old renderer read. That
+ * shape now comes from `stages.mjs`, one module at a time, and nothing called
+ * the projection any more. */
 
 /* The journey's headline.
  *
@@ -25,20 +25,4 @@ export function titleFor(doc) {
     .replace(/\s*\.\s*$/, '')
     .trim();
   return stripped.charAt(0).toUpperCase() + stripped.slice(1);
-}
-
-export function toGraph(doc) {
-  const deps = new Map(doc.nodes.map((n) => [n.id, new Set()]));
-  for (const e of doc.edges) deps.get(e.to)?.add(e.from);
-
-  return {
-    title: titleFor(doc),
-    nodes: doc.nodes.map((n) => ({
-      id: n.id,
-      title: n.title,
-      summary: n.summary,
-      deps: [...(deps.get(n.id) || [])],
-      goal: !!n.goal,
-    })),
-  };
 }

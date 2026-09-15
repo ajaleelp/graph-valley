@@ -8,14 +8,6 @@
         "start"
       ],
       "port": 3217
-    },
-    {
-      "name": "poc",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "poc/serve.mjs"
-      ],
-      "port": 5174
     }
   ]
 }

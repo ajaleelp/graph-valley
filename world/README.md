@@ -1,29 +1,21 @@
-# Slice POC — from a concept graph to a walkable Monument Valley world
+# The world engine — from a concept graph to a walkable Monument Valley world
 
-**The engine this exercised now ships.** It lives in `world/`, and `public/`
-renders with it — see section 5 of [CHALLENGES.md](../CHALLENGES.md). What is
-left here is the whitebox lab: the same engine with the curriculum, the palette
-and the art out of the way, which is where you debug geometry. The claims below
-are still checked, by `world/check.mjs`, on every build.
+This is the engine `public/` renders with. It began as an independent proof of
+concept and was promoted here once it had proved itself; the whitebox viewer it
+came with has been retired, because the product now renders exactly this code
+and `check.mjs` asserts it on every build. This document is the engine's own
+account of how it works and why.
 
-**The question:** given a few connected concepts, can we build a walkable
-isometric world in the register of Monument Valley out of a **small library of
-reusable template slices**, stitched seamlessly?
+**The question it answers:** given a few connected concepts, can we build a
+walkable isometric world in the register of Monument Valley out of a **small
+library of reusable template slices**, stitched seamlessly?
 
-**The answer: yes, with four templates.** Look and feel is deliberately left as
-whitebox — four flat materials, no lighting, no mist, no art direction.
+**The answer: yes, with four templates** — and a socket contract that makes
+seamlessness an assertion rather than a reading.
 
 ```bash
-node world/check.mjs                            # verify every claim below, headless
-node poc/serve.mjs                              # viewer at http://localhost:5174
-node poc/render.mjs deep out.svg --at p4 --nav  # render a world to a file
+node world/check.mjs      # verify every claim below, headless — 3164 assertions
 ```
-
-In the viewer: **click any platform — or any walkway — to walk there.** Every
-walkable surface is a destination, not just the courts. You can click a new spot
-mid-walk and she re-paths from where she is standing rather than snapping back.
-Drag to pan, scroll to zoom, and the toggles overlay the nav graph and the slice
-kinds.
 
 ---
 

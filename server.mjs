@@ -3,9 +3,8 @@
 //   POST /api/negotiate { topic, turns }  -> { done, ask } | { done, goal, capstone, spine }
 //   POST /api/course    { topic, goal }   -> { modules[], goal, capstone }
 //   POST /api/module    { topic, goal, id } -> { module, graph, stages[] }
-//   POST /api/syllabus  { topic, goal, capstone } -> { syllabus, source }
-//   POST /api/graph     { topic }         -> { topic, graph, source }   (projection)
-//   POST /api/node      { topic, title, summary } -> { lesson, source }
+//   POST /api/lesson    { topic, goal, id, stageId } -> { lesson, source }
+//   POST /api/remediation { topic, goal, id, kc } -> { to }
 // Uses Anthropic or OpenAI if a key is present; otherwise falls back to a
 // deterministic built-in generator so the app always works offline.
 
@@ -19,7 +18,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { llm, hasKey, describeModel } from './curriculum/llm.mjs';
 import { negotiate } from './curriculum/negotiate.mjs';
 import { buildSyllabus, defaultGoalFor, defaultCapstoneFor, MIN_MODULE_KCS } from './curriculum/build.mjs';
-import { toGraph, titleFor } from './curriculum/project.mjs';
+import { titleFor } from './curriculum/project.mjs';
 import { planModules } from './curriculum/modules.mjs';
 import { toStages, stagesToGraph, remediationFor } from './curriculum/stages.mjs';
 import {
@@ -28,13 +27,16 @@ import {
 } from './curriculum/lesson.mjs';
 
 const PORT = Number(process.env.PORT || 3217);
-/* ------------------------- TEMPORARY OBSERVABILITY -------------------------
+/* ------------------------------ OBSERVABILITY ------------------------------
  * A JSONL trace of what actually happened, so a manual test session can be
  * read back afterwards instead of reconstructed from memory. One line per
  * event, appended, never rotated, gitignored.
  *
- * Delete this block, the /api/observe route and the observe() calls in
- * public/app.js to remove it. Nothing else depends on it. */
+ * It went in as temporary and stayed on merit: every fault found during hand
+ * testing — the climb that never happened, the celebration four modules early,
+ * the filler questions, the module that was "missing" but simply not reached —
+ * was diagnosed from this file rather than from a description of it. Nothing
+ * else depends on it, and it must never break a request. */
 const TRACE = fileURLToPath(new URL('./.observe/trace.jsonl', import.meta.url));
 let traceReady = null;
 
@@ -228,7 +230,7 @@ async function handleNegotiate(req, res) {
 
 /** One topic can be negotiated into several different courses, so a syllabus is
  *  identified by its topic AND the goal that was settled on — not the topic
- *  alone. `handleNode` has to derive the same key, or it writes the lesson from
+ *  alone. `handleLesson` has to derive the same key, or it writes the lesson from
  *  whichever course happened to be cached first. */
 const keyFor = (topic, goal) => `${topic}::${goal?.statement || ''}`;
 
@@ -481,91 +483,13 @@ async function handleLesson(req, res) {
 async function handleRemediation(req, res) {
   const body = await readBody(req);
   const topic = cleanTopic(body.topic || '');
+  if (!topic || !body.kc) return send(res, 400, { error: 'topic and kc are required' });
   const built = await moduleFor(topic, body, String(body.id || ''));
   send(res, 200, { to: remediationFor(built.stages, String(body.kc || '')) });
 }
 
-async function handleSyllabus(req, res) {
-  const body = await readBody(req);
-  const raw = String(body.topic || '').slice(0, 240);
-  if (!raw.trim()) return send(res, 400, { error: 'topic is required' });
-  const topic = cleanTopic(raw);
 
-  const built = await buildFor(topic, body);
-  // Both shapes in one round trip: the renderer wants the projection, the
-  // lesson sheet wants the document. Asking for them separately meant building
-  // the world and then waiting again before anything could be taught.
-  send(res, 200, { topic, syllabus: built.doc, graph: toGraph(built.doc), source: built.source });
-}
 
-/** The old shape, projected from the new document. Renderers see no change. */
-async function handleGraph(req, res) {
-  const body = await readBody(req);
-  const raw = String(body.topic || '').slice(0, 240);
-  if (!raw.trim()) return send(res, 400, { error: 'topic is required' });
-  const topic = cleanTopic(raw);
-
-  const built = await buildFor(topic, body);
-  send(res, 200, { topic, graph: toGraph(built.doc), source: built.source });
-}
-
-async function handleNode(req, res) {
-  const body = await readBody(req);
-  const topic = cleanTopic(body.topic || '');
-  const title = String(body.title || '').slice(0, 120);
-  const summary = String(body.summary || '').slice(0, 300);
-  if (!topic || !title) return send(res, 400, { error: 'topic and title are required' });
-
-  const key = `${keyFor(topic, body.goal)}::${title}`;
-  if (lessonCache.has(key)) return send(res, 200, { lesson: lessonCache.get(key), source: 'cache' });
-
-  // The lesson is written from the atoms of the platform it belongs to, not
-  // from its label. The client sends back the goal it was built with so we look
-  // up the same course it is actually walking.
-  const held = syllabusCache.get(keyFor(topic, body.goal));
-  const doc = held?.doc || [...syllabusCache.values()].map((b) => b.doc).find((d) => d.topic === topic);
-  const node = doc?.nodes.find((n) => n.id === body.id) || doc?.nodes.find((n) => n.title === title);
-
-  // Whose questions to use. The syllabus's are far better when they are real:
-  // each is tagged to an atom and its distractors are named misconceptions. But
-  // when the syllabus itself fell back they are template filler, and filler put
-  // in front of a learner is worse than a question the model wrote about what
-  // it just taught. So in that case we ask for them.
-  const syllabusIsReal = held ? held.source !== 'fallback' : false;
-  const needChecks = !syllabusIsReal || !node?.checks?.length;
-
-  let raw = null;
-  try {
-    raw = await llm(
-      SYLLABUS_LESSON_SYSTEM,
-      syllabusLessonPrompt(doc, node, { topic, title, summary }, { needChecks }),
-      2000,
-    );
-  } catch (e) {
-    console.warn('lesson call failed:', e.message);
-    note('lesson.error', { topic, title, message: e.message });
-  }
-  let lesson = readLesson(extractJson(raw));
-  const source = lesson ? 'llm' : 'fallback';
-  if (!lesson) lesson = fallbackLesson(topic, title, summary);
-  let checkSource = 'llm';
-  if (syllabusIsReal && node?.checks?.length) {
-    lesson.checks = node.checks.map(toRendererCheck);
-    checkSource = 'syllabus';
-  } else if (!lesson.checks?.length) {
-    lesson.checks = lesson.check ? [lesson.check] : [];
-    checkSource = source === 'fallback' ? 'template' : 'llm';
-  }
-  lesson.check = lesson.checks[0];
-  lessonCache.set(key, lesson);
-  note('lesson', {
-    topic, id: body.id, title, source, checkSource,
-    paragraphs: lesson.content.length,
-    words: lesson.content.join(' ').split(/\s+/).length,
-    checks: lesson.checks.length,
-  });
-  send(res, 200, { lesson, source });
-}
 
 async function serveStatic(pathname, res) {
   let p;
@@ -600,10 +524,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/module') return await handleModule(req, res);
     if (req.method === 'POST' && url.pathname === '/api/lesson') return await handleLesson(req, res);
     if (req.method === 'POST' && url.pathname === '/api/remediation') return await handleRemediation(req, res);
-    if (req.method === 'POST' && url.pathname === '/api/syllabus') return await handleSyllabus(req, res);
-    if (req.method === 'POST' && url.pathname === '/api/graph') return await handleGraph(req, res);
-    if (req.method === 'POST' && url.pathname === '/api/node') return await handleNode(req, res);
-    // TEMPORARY: client-side events, so a manual test session reads back whole.
+    // Client-side events, so a session reads back whole — what she opened,
+    // what she got wrong, where she was walked back to.
     if (req.method === 'POST' && url.pathname === '/api/observe') {
       const b = await readBody(req);
       note(`ui.${String(b.event || 'unknown').slice(0, 40)}`, b.data || {});

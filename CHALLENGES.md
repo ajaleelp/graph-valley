@@ -61,7 +61,7 @@ not look like the reference.
    one piece of architecture on each, joined by plain walkways and stairs.
    Monument Valley is the register, not a blueprint. `world.js` went from about
    700 lines to 450 and from ~2000 shapes per world to ~750.
-7. **A slice-and-socket system** (`poc/`, proven, not yet adopted) — the world
+7. **A slice-and-socket system** (now `world/`, adopted) — the world
    assembled from four reusable templates that stitch by a stated contract
    rather than by bespoke geometry per node. See section 6.
 
@@ -202,7 +202,7 @@ the repo carried two world-builders that disagreed and the one that shipped had
 four latent defects. That is done. What follows is the record.
 
 **One engine.** The engine moved to a top-level `world/`, imported by the
-product, by the whitebox lab in `poc/`, and by `world/check.mjs`. Copying the
+product, by the whitebox lab that `poc/` then was, and by `world/check.mjs`. Copying the
 POC into `public/` would have kept two builders with different names; promoting
 it means the assertions test shipped code. `public/iso.js` and `public/world.js`
 are deleted rather than fixed — the surest way not to regress into a renderer is
@@ -276,29 +276,107 @@ before it is taken. Full reasoning:
 - The layout is chosen once, at build time. Rotating a phone re-fits the camera
   but does not re-compose the world: rebuilding mid-journey would invalidate the
   nav node the traveller is standing on.
-- `poc/` survives as the whitebox lab. It is not dead code — it is how you debug
-  geometry with the curriculum and the art out of the way.
+- `poc/` was retired once the product rendered the same engine and
+  `world/check.mjs` asserted it. Its README — the socket contract, one box per
+  tread, why the stairs have five treads — moved to `world/README.md`, where it
+  belongs.
 
 ---
 
-## 6. Immediate next steps (ranked)
+## 6. The ascent, and the teaching loop as geometry
 
-1. **Have someone read a generated lesson.** Everything else here is structure,
-   and structure is now well asserted. Nothing has verified that what a platform
-   teaches is *true*, or that walking one teaches anything. No further assertion
-   will answer it.
-2. **Decide whether `MIN_KCS` should scale with the breadth of the goal.** The
-   negotiation now makes goals narrower, a narrow goal decomposes into fewer
-   atoms, and the floor of six then rejects the syllabus as too thin — twice —
-   so it falls back to demo content. Seen on two of three live topics. The floor
-   earns its keep against weak models; the interaction with a well-scoped goal
-   is new and unhandled.
-3. **Rotating / pivoting bridge interaction** — the most Monument Valley thing
-   possible; a bridge that swings to connect two decks when you tap it. Easier
-   under the socket contract than before: a pivot is a slice whose socket moves
-   from one side to another, and the seam check says whether it has landed.
-3. **Global journey cache + pre-review** of popular topics (cost + quality).
-4. **Clarifying question before generation** (level/scope) — biggest curriculum
-   quality win.
-5. **Ambient sound** (Web Audio, no assets): pad + soft walk chimes.
-6. **Spaced repetition / better assessment** before this is a real learning tool.
+The valley became a tower. This is the record of the second rebuild — the one
+after the renderer — and the faults that testing by hand turned up in it.
+
+### Why one module at a time
+
+The whole course used to be decomposed in one call: sixteen atoms, every rule
+satisfied at once, one shot. It failed often, and it failed invisibly — the
+pipeline fell back to a nine-step template with the topic pasted in, and a
+learner saw "Getting oriented" and "The rule underneath" and could not tell
+that nothing about their subject had been decomposed at all.
+
+Measured on three real goals: whole-course gave one outright fallback and two
+rescued-on-retry; the same goals decomposed a module at a time gave six clean
+documents out of six, first attempt. A module satisfies the same rules over
+five atoms instead of sixteen. It also buys length — six or seven modules of
+five to eight atoms is thirty-six to forty-two, where the cap was sixteen.
+
+The floor had to move with it. `MIN_KCS = 6` rejected five-atom modules as "too
+thin for a course", which is true and irrelevant; the design said so and the
+implementation did not, for one commit. Item 2 of the old next-steps list is
+closed by construction: the floor belongs to the course, not the module.
+
+### Why the capstone had to leave the world
+
+Mist could not shrink the view, and the reason was a deliberate choice: the
+summit was always revealed, a ghost on the horizon, and it pinned the bounding
+box. Measured over full playthroughs, the revealed area never fell below 96% of
+the whole world. Mist hid detail, never extent.
+
+Lifting the capstone into screen space — real geometry, drawn in a layer that
+never enters the world's bounds — dropped the opening view to 16% on a deep
+world. It is also what made lazy generation visually possible: if the summit
+must be drawn, the whole graph must exist first; once the world may end in
+mist, what lies past the mist need not exist yet.
+
+### The platforms are the loop
+
+`segments` had named activate / demonstrate / apply since the pipeline was
+written, and `scaffold` had said how much support to leave. They were prompt
+hints that produced three undifferentiated paragraphs. They are four kinds of
+platform now, and each behaves differently: study writes the worked example,
+practice sets the same atoms with the middle taken out, prove examines cold,
+and a miss at prove walks her back to the practice that drilled the atom.
+
+Faded practice existed for the first time at that point. Asked for a completion
+problem it produced "$50,000 for a community project", worked the first step,
+and left the rest.
+
+### What hand testing found, in order
+
+Every one of these came out of `.observe/trace.jsonl`, not from a description.
+
+- **Filler questions reached the learner** through a cache flag that overwrote
+  `source`, so a cached fallback answered "no" to "did this fall back?".
+- **Two questions per platform**: study closed with "now you try" while
+  practice was a whole platform doing that, and practice's prose ended in a
+  question that the check then asked differently.
+- **The worked opening computed the very thing the check asked**, and the check
+  had become four numbers to choose between.
+- **The subject looked incomplete when it was merely unfinished.** A course on
+  the Indian political system "never mentioned two houses" — they were module
+  three of seven and one module had been cleared. The route panel exists
+  because of this, and the first module now has to give the shape of the whole
+  subject.
+- **Pressing "Continue" was the one way never to climb.** The timer that
+  ascended was cancelled by the button that closed the sheet, and the close
+  path returned early on `goal: true`. Fixing that exposed the whole-journey
+  celebration firing after one module of five.
+- **Every module was the same picture**, because every module has the same
+  stage shape. Per-module seeds mirror the layout and vary the architecture.
+- **The climb transition was three animations fighting**, and a camera computed
+  from a 0x0 viewport that produced a negative fit scale, so "the whole course"
+  and "one castle" were the same shot. Frame-by-frame sampling showed the scale
+  pinned at 0.620 from first frame to last.
+
+---
+
+## 7. Immediate next steps (ranked)
+
+1. **Administer the capstone.** Backward design fixes the assessment first; it
+   is generated, carried everywhere, and never given. Arriving at the summit
+   should mean taking it, against its rubric.
+2. **Free-text answers on `practice`**, then `prove` — closed-set classification
+   against the misconceptions every check already names, feeding the
+   remediation walk that already exists. Designed in
+   `docs/plans/2026-09-09-conversation-design.md`; not built.
+3. **Have someone read a generated lesson.** Structure is now well asserted.
+   Nothing has verified that what a platform teaches is *true*, or that walking
+   one teaches anything. No further assertion will answer it.
+4. **Spaced review.** Nothing ever comes back. Gold stays gold.
+5. **Use the priors.** `pack()` accepts held atoms; nothing calls it.
+6. **Rotating / pivoting bridge** — the most Monument Valley thing possible, and
+   cheap under the socket contract: a pivot is a slice whose socket moves, and
+   the seam check says whether it has landed.
+7. **Ambient sound** (Web Audio, no assets): pad + soft walk chimes.
